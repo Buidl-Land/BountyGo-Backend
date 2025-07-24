@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import secrets
+import re
+import hashlib
 
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError
@@ -71,3 +73,140 @@ def generate_random_string(length: int = 32) -> str:
 def generate_nonce() -> str:
     """Generate nonce for Web3 authentication"""
     return secrets.token_hex(16)
+
+
+# Web3 Security Utilities
+
+def validate_ethereum_address(address: str) -> bool:
+    """Validate Ethereum address format"""
+    if not address:
+        return False
+    
+    # Check if it's a valid hex string with 0x prefix and 40 characters
+    pattern = r'^0x[a-fA-F0-9]{40}$'
+    return bool(re.match(pattern, address))
+
+
+def normalize_ethereum_address(address: str) -> str:
+    """Normalize Ethereum address to lowercase"""
+    if not validate_ethereum_address(address):
+        raise ValueError("Invalid Ethereum address format")
+    return address.lower()
+
+
+def create_web3_auth_message(wallet_address: str, nonce: str) -> str:
+    """Create standardized message for Web3 signature verification"""
+    timestamp = int(datetime.utcnow().timestamp())
+    return (
+        f"Sign this message to authenticate with BountyGo:\n\n"
+        f"Wallet: {wallet_address}\n"
+        f"Nonce: {nonce}\n"
+        f"Timestamp: {timestamp}\n\n"
+        f"This request will not trigger a blockchain transaction or cost any gas fees."
+    )
+
+
+def hash_message_for_signature(message: str) -> str:
+    """Hash message for signature verification (Ethereum style)"""
+    # Ethereum signed message prefix
+    prefix = f"\x19Ethereum Signed Message:\n{len(message)}"
+    full_message = prefix + message
+    return hashlib.sha3_256(full_message.encode()).hexdigest()
+
+
+# Session Security
+
+def generate_session_id() -> str:
+    """Generate secure session ID"""
+    return secrets.token_urlsafe(32)
+
+
+def create_csrf_token() -> str:
+    """Create CSRF protection token"""
+    return secrets.token_urlsafe(32)
+
+
+def validate_csrf_token(token: str, expected: str) -> bool:
+    """Validate CSRF token"""
+    if not token or not expected:
+        return False
+    return secrets.compare_digest(token, expected)
+
+
+# Rate Limiting Security
+
+def create_rate_limit_key(identifier: str, endpoint: str) -> str:
+    """Create rate limiting key"""
+    return f"rate_limit:{identifier}:{endpoint}"
+
+
+def hash_ip_address(ip: str) -> str:
+    """Hash IP address for privacy-preserving rate limiting"""
+    return hashlib.sha256(ip.encode()).hexdigest()[:16]
+
+
+# Input Sanitization
+
+def sanitize_user_input(text: str, max_length: int = 1000) -> str:
+    """Sanitize user input to prevent XSS and other attacks"""
+    if not text:
+        return ""
+    
+    # Truncate to max length
+    text = text[:max_length]
+    
+    # Remove potentially dangerous characters
+    dangerous_chars = ['<', '>', '"', "'", '&', '\x00', '\r']
+    for char in dangerous_chars:
+        text = text.replace(char, '')
+    
+    # Strip whitespace
+    return text.strip()
+
+
+def validate_email_format(email: str) -> bool:
+    """Validate email format"""
+    if not email:
+        return False
+    
+    # Basic email regex
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(pattern, email))
+
+
+# Security Headers
+
+def get_security_headers() -> Dict[str, str]:
+    """Get security headers for HTTP responses"""
+    return {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY", 
+        "X-XSS-Protection": "1; mode=block",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": "default-src 'self'",
+    }
+
+
+# Token Blacklisting (for logout)
+
+def create_token_blacklist_key(token: str) -> str:
+    """Create Redis key for token blacklisting"""
+    # Use hash of token to avoid storing full token
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return f"blacklist:token:{token_hash}"
+
+
+def get_token_ttl(token: str) -> int:
+    """Get remaining TTL for token (for blacklist expiry)"""
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
+        exp = payload.get("exp")
+        if exp:
+            remaining = exp - int(datetime.utcnow().timestamp())
+            return max(0, remaining)
+    except JWTError:
+        pass
+    return 0

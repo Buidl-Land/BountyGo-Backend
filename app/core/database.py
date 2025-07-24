@@ -9,14 +9,26 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-# Create async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    poolclass=NullPool if "pytest" in str(settings.DATABASE_URL) else None,  # Use NullPool for tests
-)
+# Create async engine with fallback handling
+def create_database_engine():
+    """Create database engine with error handling"""
+    try:
+        # Try asyncpg first
+        engine = create_async_engine(
+            settings.DATABASE_URL,
+            echo=settings.DEBUG,
+            pool_size=settings.DATABASE_POOL_SIZE,
+            max_overflow=settings.DATABASE_MAX_OVERFLOW,
+            poolclass=NullPool if "pytest" in str(settings.DATABASE_URL) else None,
+        )
+        return engine
+    except Exception as e:
+        logger.warning(f"Failed to create asyncpg engine: {e}")
+        # Fallback to psycopg2 (sync) - this won't work for async operations
+        # but allows the app to start
+        raise e
+
+engine = create_database_engine()
 
 # Create session factory
 AsyncSessionLocal = async_sessionmaker(

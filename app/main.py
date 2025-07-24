@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, close_db
 from app.core.redis import init_redis
 from app.core.logging import configure_logging
+import logging
 from app.core.middleware import (
     logging_middleware,
     exception_handler,
@@ -21,6 +22,7 @@ from app.api.v1.api import api_router
 
 # Configure logging
 configure_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -29,14 +31,26 @@ async def lifespan(app: FastAPI):
     # Startup
     try:
         await init_db()
-        await init_redis()
+        logger.info("✅ Database initialized successfully")
     except Exception as e:
-        # In test environment, we might not have DB/Redis running
+        logger.warning(f"⚠️ Database initialization failed: {e}")
         if not settings.DEBUG:
             raise e
+    
+    try:
+        await init_redis()
+        logger.info("✅ Redis initialized successfully")
+    except Exception as e:
+        logger.warning(f"⚠️ Redis initialization failed: {e}")
+        if not settings.DEBUG:
+            raise e
+    
     yield
     # Shutdown
-    pass
+    try:
+        await close_db()
+    except:
+        pass
 
 
 app = FastAPI(

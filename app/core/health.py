@@ -22,10 +22,17 @@ async def check_database_health() -> Dict[str, Any]:
             "details": "Database connection successful"
         }
     except Exception as e:
+        # Try to provide more helpful error information
+        error_msg = str(e)
+        if "getaddrinfo failed" in error_msg:
+            error_msg = "Network connection to database failed"
+        elif "authentication failed" in error_msg:
+            error_msg = "Database authentication failed"
+        
         return {
             "status": "unhealthy",
-            "error": str(e),
-            "details": "Database connection failed"
+            "error": error_msg,
+            "details": "Database connection failed - API will run in limited mode"
         }
 
 
