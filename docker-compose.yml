@@ -1,0 +1,135 @@
+# BountyGo Backend Docker Compose Configuration
+# 开发环境配置
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: bountygo-db
+    environment:
+      POSTGRES_DB: bountygo
+      POSTGRES_USER: bountygo
+      POSTGRES_PASSWORD: bountygo123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bountygo -d bountygo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bountygo-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: bountygo-redis
+    command: redis-server --appendonly yes --requirepass ""
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bountygo-network
+
+  # BountyGo Backend Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bountygo-app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://bountygo:bountygo123@db:5432/bountygo
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+      - DEBUG=true
+      # URL Agent Configuration
+      - CONTENT_EXTRACTION_TIMEOUT=30
+      - MAX_CONTENT_LENGTH=50000
+      - USE_PROXY=false
+      - ENABLE_CONTENT_CACHE=true
+      - CONTENT_CACHE_TTL=3600
+      - USER_AGENT=BountyGo-URLAgent/1.0
+      - MAX_REDIRECTS=5
+      - VERIFY_SSL=true
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - bountygo-network
+    restart: unless-stopped
+
+  # pgAdmin (Database Management) - Development Profile
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bountygo-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@bountygo.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - bountygo-network
+    profiles:
+      - tools
+    restart: unless-stopped
+
+  # Redis Commander (Redis Management) - Development Profile
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: bountygo-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - bountygo-network
+    profiles:
+      - tools
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  bountygo-network:
+    driver: bridge
+    name: bountygo-network

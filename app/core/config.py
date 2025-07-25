@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     
+    # PostgreSQL Configuration (for building DATABASE_URL if needed)
+    POSTGRES_DB: Optional[str] = None
+    POSTGRES_USER: Optional[str] = None
+    POSTGRES_PASSWORD: Optional[str] = None
+    
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_CACHE_TTL: int = 300  # 5 minutes
@@ -41,6 +46,26 @@ class Settings(BaseSettings):
     # External Services
     AI_SERVICE_URL: Optional[str] = None
     AI_SERVICE_API_KEY: Optional[str] = None
+    
+    # PPIO Model Configuration
+    PPIO_API_KEY: str
+    PPIO_BASE_URL: str = "https://api.ppinfra.com/v3/openai"
+    PPIO_MODEL_NAME: str = "qwen/qwen3-coder-480b-a35b-instruct"
+    PPIO_MAX_TOKENS: int = 4000
+    PPIO_TEMPERATURE: float = 0.1
+    PPIO_TIMEOUT: int = 60
+    PPIO_MAX_RETRIES: int = 3
+    
+    # Content Extraction Configuration
+    CONTENT_EXTRACTION_TIMEOUT: int = 30
+    MAX_CONTENT_LENGTH: int = 50000
+    USE_PROXY: bool = False
+    PROXY_URL: Optional[str] = None
+    ENABLE_CONTENT_CACHE: bool = True
+    CONTENT_CACHE_TTL: int = 3600
+    USER_AGENT: str = "BountyGo-URLAgent/1.0"
+    MAX_REDIRECTS: int = 5
+    VERIFY_SSL: bool = True
     
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
@@ -97,6 +122,179 @@ class Settings(BaseSettings):
     def is_dev_test_token_enabled(self) -> bool:
         """Check if development test token is enabled"""
         return self.is_development() and bool(self.DEV_TEST_TOKEN)
+    
+    def validate_ppio_config(self) -> dict:
+        """Validate PPIO configuration and return validation results"""
+        validation_results = {
+            "valid": True,
+            "errors": [],
+            "warnings": []
+        }
+        
+        # Validate API key
+        if not self.PPIO_API_KEY:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_API_KEY is required")
+        elif self.PPIO_API_KEY == "sk_your_ppio_api_key_here":
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_API_KEY must be replaced with actual API key")
+        elif not self.PPIO_API_KEY.startswith('sk_'):
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_API_KEY must start with 'sk_'")
+        elif len(self.PPIO_API_KEY) < 20:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_API_KEY appears to be too short")
+        
+        # Validate base URL
+        if not self.PPIO_BASE_URL.startswith(('http://', 'https://')):
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_BASE_URL must be a valid HTTP/HTTPS URL")
+        
+        # Validate model name
+        supported_models = [
+            "qwen/qwen3-coder-480b-a35b-instruct",
+            "moonshotai/kimi-k2-instruct", 
+            "deepseek/deepseek-r1-0528",
+            "qwen/qwen3-235b-a22b-instruct-2507"
+        ]
+        if self.PPIO_MODEL_NAME not in supported_models:
+            validation_results["warnings"].append(
+                f"PPIO_MODEL_NAME '{self.PPIO_MODEL_NAME}' is not in the recommended list. "
+                f"Supported models: {', '.join(supported_models)}"
+            )
+        
+        # Validate numeric parameters
+        if not 1 <= self.PPIO_MAX_TOKENS <= 32000:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_MAX_TOKENS must be between 1 and 32000")
+        
+        if not 0 <= self.PPIO_TEMPERATURE <= 2:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_TEMPERATURE must be between 0 and 2")
+        
+        if not 1 <= self.PPIO_TIMEOUT <= 300:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_TIMEOUT must be between 1 and 300 seconds")
+        
+        if not 1 <= self.PPIO_MAX_RETRIES <= 10:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PPIO_MAX_RETRIES must be between 1 and 10")
+        
+        return validation_results
+    
+    def validate_url_agent_config(self) -> dict:
+        """Validate URL agent configuration"""
+        validation_results = {
+            "valid": True,
+            "errors": [],
+            "warnings": []
+        }
+        
+        # Validate timeout settings
+        if self.CONTENT_EXTRACTION_TIMEOUT <= 0:
+            validation_results["valid"] = False
+            validation_results["errors"].append("CONTENT_EXTRACTION_TIMEOUT must be positive")
+        elif self.CONTENT_EXTRACTION_TIMEOUT > 300:  # 5 minutes
+            validation_results["warnings"].append(
+                "CONTENT_EXTRACTION_TIMEOUT is very high (>5 minutes), this may cause request timeouts"
+            )
+        
+        # Validate content length
+        if self.MAX_CONTENT_LENGTH <= 0:
+            validation_results["valid"] = False
+            validation_results["errors"].append("MAX_CONTENT_LENGTH must be positive")
+        elif self.MAX_CONTENT_LENGTH > 1000000:  # 1MB
+            validation_results["warnings"].append(
+                "MAX_CONTENT_LENGTH is very high (>1MB), this may cause memory issues"
+            )
+        
+        # Validate cache TTL
+        if self.CONTENT_CACHE_TTL <= 0:
+            validation_results["valid"] = False
+            validation_results["errors"].append("CONTENT_CACHE_TTL must be positive")
+        
+        # Validate proxy configuration
+        if self.USE_PROXY and not self.PROXY_URL:
+            validation_results["valid"] = False
+            validation_results["errors"].append("PROXY_URL is required when USE_PROXY is true")
+        
+        if self.PROXY_URL and not self.PROXY_URL.startswith(('http://', 'https://', 'socks4://', 'socks5://')):
+            validation_results["valid"] = False
+            validation_results["errors"].append("PROXY_URL must be a valid proxy URL")
+        
+        # Validate redirects
+        if not 0 <= self.MAX_REDIRECTS <= 20:
+            validation_results["valid"] = False
+            validation_results["errors"].append("MAX_REDIRECTS must be between 0 and 20")
+        
+        # Validate user agent
+        if not self.USER_AGENT or len(self.USER_AGENT.strip()) == 0:
+            validation_results["valid"] = False
+            validation_results["errors"].append("USER_AGENT cannot be empty")
+        
+        return validation_results
+    
+    def validate_production_config(self) -> dict:
+        """Validate configuration for production environment"""
+        validation_results = {
+            "valid": True,
+            "errors": [],
+            "warnings": []
+        }
+        
+        if not self.is_production():
+            validation_results["warnings"].append("Not running in production environment")
+            return validation_results
+        
+        # Production security checks
+        if self.DEBUG:
+            validation_results["valid"] = False
+            validation_results["errors"].append("DEBUG must be False in production")
+        
+        if len(self.SECRET_KEY) < 32:
+            validation_results["valid"] = False
+            validation_results["errors"].append("SECRET_KEY must be at least 32 characters in production")
+        
+        if self.DEV_TEST_TOKEN:
+            validation_results["valid"] = False
+            validation_results["errors"].append("DEV_TEST_TOKEN must not be set in production")
+        
+        # Production performance recommendations
+        if self.DATABASE_POOL_SIZE < 10:
+            validation_results["warnings"].append("Consider increasing DATABASE_POOL_SIZE for production")
+        
+        if self.CONTENT_CACHE_TTL < 1800:  # 30 minutes
+            validation_results["warnings"].append("Consider increasing CONTENT_CACHE_TTL for production")
+        
+        if self.PPIO_TIMEOUT < 60:
+            validation_results["warnings"].append("Consider increasing PPIO_TIMEOUT for production")
+        
+        # SSL verification should be enabled in production
+        if not self.VERIFY_SSL:
+            validation_results["warnings"].append("VERIFY_SSL should be True in production")
+        
+        return validation_results
+    
+    def get_config_summary(self) -> dict:
+        """Get a summary of current configuration for debugging"""
+        return {
+            "environment": self.ENVIRONMENT,
+            "debug": self.DEBUG,
+            "ppio_model": self.PPIO_MODEL_NAME,
+            "ppio_base_url": self.PPIO_BASE_URL,
+            "ppio_timeout": self.PPIO_TIMEOUT,
+            "ppio_max_retries": self.PPIO_MAX_RETRIES,
+            "content_timeout": self.CONTENT_EXTRACTION_TIMEOUT,
+            "max_content_length": self.MAX_CONTENT_LENGTH,
+            "cache_enabled": self.ENABLE_CONTENT_CACHE,
+            "cache_ttl": self.CONTENT_CACHE_TTL,
+            "proxy_enabled": self.USE_PROXY,
+            "proxy_url": self.PROXY_URL if self.USE_PROXY else None,
+            "user_agent": self.USER_AGENT,
+            "max_redirects": self.MAX_REDIRECTS,
+            "verify_ssl": self.VERIFY_SSL,
+            "dev_test_enabled": self.is_dev_test_token_enabled()
+        }
     
     class Config:
         env_file = ".env"

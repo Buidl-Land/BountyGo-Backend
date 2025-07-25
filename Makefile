@@ -52,6 +52,15 @@ docker-logs: ## View Docker logs
 verify: ## Verify setup
 	python scripts/verify_setup.py
 
+validate-config: ## Validate configuration
+	python scripts/validate_config.py
+
+validate-deps: ## Validate dependencies
+	python scripts/validate_dependencies.py
+
+validate-all: ## Run all validations
+	python scripts/validate_dependencies.py && python scripts/validate_config.py
+
 migrate: ## Run database migrations
 	alembic upgrade head
 

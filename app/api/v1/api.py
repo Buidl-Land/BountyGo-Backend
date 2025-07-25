@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.endpoints import users, tasks, tags, analytics
+from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent
 
 api_router = APIRouter()
 
@@ -15,6 +15,7 @@ api_router.include_router(users.router, prefix="/users", tags=["👤 Users"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["📋 Tasks"])
 api_router.include_router(tags.router, prefix="/tags", tags=["🏷️ Tags"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["📊 Analytics"])
+api_router.include_router(url_agent.router, prefix="/url-agent", tags=["🤖 URL Agent"])
 
 
 @api_router.get("/", summary="API信息", tags=["ℹ️ System"])
@@ -37,27 +38,35 @@ async def api_info():
             "智能标签分类系统",
             "任务讨论和消息",
             "数据分析和统计",
-            "Web3钱包集成"
+            "Web3钱包集成",
+            "AI驱动的URL内容提取",
+            "智能任务信息解析"
         ],
         "endpoints": {
             "authentication": "/api/v1/auth",
             "users": "/api/v1/users",
             "tasks": "/api/v1/tasks",
             "tags": "/api/v1/tags",
-            "analytics": "/api/v1/analytics"
+            "analytics": "/api/v1/analytics",
+            "url_agent": "/api/v1/url-agent"
         },
         "authentication": {
             "required_for": [
                 "用户管理 (/api/v1/users/*)",
                 "任务创建和修改",
                 "个人分析数据",
-                "标签兴趣配置"
+                "标签兴趣配置",
+                "URL处理和任务创建 (/api/v1/url-agent/process)",
+                "性能指标查看 (/api/v1/url-agent/metrics)"
             ],
             "public_endpoints": [
                 "任务列表和详情",
                 "标签搜索",
                 "系统统计",
-                "最近活动"
+                "最近活动",
+                "URL信息提取 (/api/v1/url-agent/extract-info)",
+                "文本内容分析 (/api/v1/url-agent/extract-from-content)",
+                "服务状态查询 (/api/v1/url-agent/status)"
             ]
         }
     }
