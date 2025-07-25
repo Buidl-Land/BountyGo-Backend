@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = "development"
     
+    # Development Testing
+    DEV_TEST_TOKEN: Optional[str] = None
+    DEV_TEST_USER_EMAIL: str = "dev@bountygo.com"
+    DEV_TEST_USER_NICKNAME: str = "开发测试用户"
+    
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
@@ -82,6 +87,16 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development"""
         return self.ENVIRONMENT.lower() == "development"
+    
+    def get_dev_test_token(self) -> Optional[str]:
+        """Get development test token if available"""
+        if self.is_development() and self.DEV_TEST_TOKEN:
+            return self.DEV_TEST_TOKEN
+        return None
+    
+    def is_dev_test_token_enabled(self) -> bool:
+        """Check if development test token is enabled"""
+        return self.is_development() and bool(self.DEV_TEST_TOKEN)
     
     class Config:
         env_file = ".env"

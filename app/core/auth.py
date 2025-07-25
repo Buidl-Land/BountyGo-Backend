@@ -64,6 +64,12 @@ async def get_current_user_optional(
     if not credentials:
         return None
     
+    # 开发环境测试token支持
+    from app.core.config import settings
+    dev_token = settings.get_dev_test_token()
+    if dev_token and credentials.credentials == dev_token:
+        return await get_dev_test_user(db)
+    
     try:
         user = await auth_service.validate_user_session(db, credentials.credentials)
         return user
@@ -78,21 +84,98 @@ async def get_current_user(
     """
     Get current user from token (required - raises exception if not authenticated)
     """
+    from app.core.config import settings
+    
     if not credentials:
+        dev_info = ""
+        if settings.is_dev_test_token_enabled():
+            dev_info = f" 开发环境可使用测试token: {settings.get_dev_test_token()}"
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
+            detail=f"缺少身份认证令牌。请在请求头中添加 'Authorization: Bearer <token>'。{dev_info}",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    try:
-        user = await auth_service.validate_user_session(db, credentials.credentials)
-        return user
-    except AuthenticationError as e:
+    token = credentials.credentials
+    
+    # 检查token基本格式
+    if not token or token.strip() == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="访问令牌为空。请提供有效的Bearer token。",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if token in ["null", "undefined", "None"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="访问令牌格式错误。请检查前端是否正确传递token。",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 开发环境测试token支持
+    dev_token = settings.get_dev_test_token()
+    if dev_token and token == dev_token:
+        try:
+            return await get_dev_test_user(db)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"创建开发测试用户失败：{str(e)}"
+            )
+    
+    # JWT token验证
+    try:
+        user = await auth_service.validate_user_session(db, token)
+        return user
+    except AuthenticationError as e:
+        error_msg = str(e).lower()
+        
+        if "expired" in error_msg or "exp" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="访问令牌已过期。请使用refresh token刷新令牌或重新登录。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        elif "invalid" in error_msg or "decode" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="访问令牌格式无效。请检查token是否完整且未被篡改。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        elif "user not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="令牌对应的用户不存在。该账户可能已被删除，请重新注册。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        elif "revoked" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="访问令牌已被撤销。请重新登录获取新的令牌。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        elif "inactive" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="用户账户已被禁用。请联系管理员激活账户。"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"身份认证失败：{str(e)}。请检查令牌有效性或重新登录。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception as e:
+        # 处理其他意外错误
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"认证过程中发生意外错误: {e}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="认证服务暂时不可用，请稍后重试。"
         )
 
 
@@ -247,6 +330,40 @@ class SessionManager:
         return await auth_service.refresh_service.cleanup_expired_tokens(db)
 
 
+async def get_dev_test_user(db: AsyncSession) -> User:
+    """
+    获取开发环境测试用户
+    如果不存在则创建一个
+    """
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.core.config import settings
+    
+    # 查找测试用户
+    result = await db.execute(
+        select(User).where(User.email == settings.DEV_TEST_USER_EMAIL)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # 创建测试用户
+        user = User(
+            email=settings.DEV_TEST_USER_EMAIL,
+            nickname=settings.DEV_TEST_USER_NICKNAME,
+            google_id="dev_test_user_123",
+            is_active=True
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"创建开发测试用户: {user.email}")
+    
+    return user
+
+
 # Export commonly used dependencies
 __all__ = [
     "get_current_user",
@@ -258,5 +375,6 @@ __all__ = [
     "extract_user_from_request",
     "SessionManager",
     "AuthenticationMiddleware",
-    "security"
+    "security",
+    "get_dev_test_user"
 ]

@@ -106,7 +106,8 @@ class DatabaseManager:
         """
         try:
             async with self.session_factory() as session:
-                await session.execute("SELECT 1")
+                from sqlalchemy import text
+                await session.execute(text("SELECT 1"))
                 return True
         except Exception as e:
             logger.error(f"Database health check failed: {e}")

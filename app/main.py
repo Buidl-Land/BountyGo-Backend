@@ -54,10 +54,80 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="BountyGo API",
-    description="AI-powered bounty task aggregation and matching platform",
+    title="🚀 BountyGo API",
+    description="""
+    ## AI-powered bounty task aggregation and matching platform
+
+    BountyGo是一个智能赏金任务聚合和匹配平台，解决Web3赏金生态系统中的碎片化问题。
+
+    ### 核心功能
+    - 🔐 **身份认证**: JWT + Google OAuth + Web3钱包认证
+    - 👤 **用户管理**: 用户资料、钱包地址管理
+    - 📋 **任务管理**: 赏金任务发布、搜索、参与
+    - 🏷️ **标签系统**: 智能分类和个性化推荐
+    - 💬 **讨论系统**: 任务讨论和实时消息
+    - 📊 **数据分析**: 用户行为分析和任务统计
+
+    ### 技术特性
+    - ⚡ **异步架构**: 基于FastAPI的高性能异步API
+    - 🗄️ **数据库**: PostgreSQL + SQLAlchemy 2.0 异步ORM
+    - 🔒 **安全性**: JWT认证、CORS保护、请求限流
+    - 📝 **数据验证**: Pydantic v2 完整类型验证
+    - 🚀 **高性能**: Redis缓存、数据库连接池优化
+
+    ### 开始使用
+    1. 通过 `/api/v1/auth/google` 进行Google OAuth登录
+    2. 使用 `/api/v1/users/me` 管理个人资料
+    3. 通过 `/api/v1/tasks` 浏览和创建任务
+    4. 使用 `/api/v1/tags` 管理标签和兴趣配置
+    """,
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    contact={
+        "name": "BountyGo Team",
+        "url": "https://bountygo.com",
+        "email": "support@bountygo.com",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    servers=[
+        {
+            "url": "http://localhost:8000",
+            "description": "开发环境"
+        },
+        {
+            "url": "https://api.bountygo.com",
+            "description": "生产环境"
+        }
+    ],
+    tags_metadata=[
+        {
+            "name": "ℹ️ System",
+            "description": "系统信息和健康检查"
+        },
+        {
+            "name": "🔐 Authentication",
+            "description": "用户认证和授权管理"
+        },
+        {
+            "name": "👤 Users",
+            "description": "用户资料和钱包管理"
+        },
+        {
+            "name": "📋 Tasks",
+            "description": "赏金任务管理和参与"
+        },
+        {
+            "name": "🏷️ Tags",
+            "description": "标签系统和兴趣配置"
+        },
+        {
+            "name": "📊 Analytics",
+            "description": "数据分析和统计报告"
+        }
+    ]
 )
 
 # Exception handlers
@@ -81,9 +151,15 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/health")
+@app.get("/health", summary="健康检查", tags=["ℹ️ System"])
 async def health_check():
-    """Health check endpoint"""
+    """
+    系统健康检查端点
+    
+    检查数据库连接、Redis连接等系统组件状态
+    
+    - **返回**: 系统健康状态信息
+    """
     return await get_system_health()
 
 
