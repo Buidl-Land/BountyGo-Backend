@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.models.user import User
-from app.services.auth import auth_service
+# Lazy import to avoid circular dependency
 
 
 # Security scheme for JWT tokens
@@ -46,6 +46,7 @@ class AuthenticationMiddleware:
             return None
         
         try:
+            from app.services.auth import auth_service
             user = await auth_service.validate_user_session(db, token)
             return user
         except AuthenticationError:
@@ -71,6 +72,7 @@ async def get_current_user_optional(
         return await get_dev_test_user(db)
     
     try:
+        from app.services.auth import auth_service
         user = await auth_service.validate_user_session(db, credentials.credentials)
         return user
     except AuthenticationError:
@@ -127,6 +129,7 @@ async def get_current_user(
     
     # JWT token验证
     try:
+        from app.services.auth import auth_service
         user = await auth_service.validate_user_session(db, token)
         return user
     except AuthenticationError as e:
@@ -250,6 +253,7 @@ async def authenticate_user_by_token(
     Useful for WebSocket connections or custom authentication flows
     """
     try:
+        from app.services.auth import auth_service
         user = await auth_service.validate_user_session(db, token)
         return user
     except AuthenticationError as e:
@@ -293,6 +297,7 @@ class SessionManager:
         user_id: int
     ) -> dict:
         """Create new user session"""
+        from app.services.auth import auth_service
         token_response = await auth_service.create_token_pair(db, user_id)
         return {
             "access_token": token_response.access_token,
@@ -307,6 +312,7 @@ class SessionManager:
         refresh_token: str
     ) -> dict:
         """Refresh user session"""
+        from app.services.auth import auth_service
         token_response = await auth_service.refresh_access_token(db, refresh_token)
         return {
             "access_token": token_response.access_token,
@@ -322,11 +328,13 @@ class SessionManager:
         refresh_token: Optional[str] = None
     ) -> bool:
         """Revoke user session"""
+        from app.services.auth import auth_service
         return await auth_service.revoke_tokens(db, user_id, refresh_token)
     
     @staticmethod
     async def cleanup_expired_sessions(db: AsyncSession) -> int:
         """Clean up expired sessions"""
+        from app.services.auth import auth_service
         return await auth_service.refresh_service.cleanup_expired_tokens(db)
 
 

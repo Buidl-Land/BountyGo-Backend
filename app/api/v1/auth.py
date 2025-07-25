@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, get_current_user_optional, SessionManager
-from app.schemas.user import TokenResponse, User
+from app.schemas.user import TokenResponse, User, GoogleAuthRequest
 from app.models.user import User as UserModel
 
 router = APIRouter()
@@ -145,3 +145,58 @@ async def optional_auth_endpoint(
             "message": "Hello anonymous user!",
             "authenticated": False
         }
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+    request: GoogleAuthRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Google OAuth login endpoint
+    """
+    try:
+        from app.services.google_auth import google_auth_service
+        
+        token_response = await google_auth_service.authenticate_with_google(
+            db, 
+            request.google_token
+        )
+        
+        return token_response
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
+@router.post("/google/revoke")
+async def google_revoke(
+    google_access_token: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoke Google OAuth access
+    """
+    try:
+        from app.services.google_auth import google_auth_service
+        
+        # 撤销Google访问权限
+        success = await google_auth_service.revoke_google_access(google_access_token)
+        
+        # 撤销本地refresh tokens
+        await SessionManager.revoke_session(db, current_user.id)
+        
+        return {
+            "message": "Google access revoked successfully",
+            "google_revoked": success
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke Google access: {str(e)}"
+        )
