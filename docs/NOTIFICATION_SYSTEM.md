@@ -8,7 +8,7 @@ BountyGo 通知系统提供了完整的任务提醒和通知功能，支持多�
 
 ### 1. 任务提醒
 - **3天前提醒**: 任务截止日期前3天发送提醒
-- **1天前提醒**: 任务截止日期前1天发送提醒  
+- **1天前提醒**: 任务截止日期前1天发送提醒
 - **2小时前提醒**: 任务截止日期前2小时发送最后提醒
 - **自动调度**: 用户加入任务时自动安排提醒
 
@@ -17,7 +17,39 @@ BountyGo 通知系统提供了完整的任务提醒和通知功能，支持多�
 - **Telegram Bot**: 通过Telegram机器人发送消息
 - **邮件通知**: 通过邮件发送（可扩展）
 
-### 3. 个性化设置
+### 3. Telegram Bot 绑定流程
+用户通过Telegram Bot的指令来绑定账号：
+
+1. **启动Bot对话**
+   ```
+   /start - 显示欢迎消息和可用命令
+   ```
+
+2. **绑定账号**
+   ```
+   /bind <user_id> - 绑定BountyGo账号
+   ```
+   - 用户需要从BountyGo应用获取user_id（数字ID）
+   - Bot验证用户ID有效性
+   - 将Telegram chat_id与用户账号关联
+   - 自动启用Telegram通知
+
+3. **查看绑定状态**
+   ```
+   /status - 查看当前绑定状态
+   ```
+
+4. **解绑账号**
+   ```
+   /unbind - 解绑当前账号
+   ```
+
+5. **获取帮助**
+   ```
+   /help - 显示所有可用命令和使用说明
+   ```
+
+### 4. 个性化设置
 - **提醒类型开关**: 可单独控制每种提醒类型
 - **渠道偏好**: 可选择接收通知的渠道
 - **免打扰时间**: 设置免打扰时间段
@@ -188,7 +220,6 @@ TELEGRAM_BOT_TOKEN=your-bot-token-here
 ```bash
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/telegram/webhook
 
 # 通知设置
 NOTIFICATION_BATCH_SIZE=100
@@ -245,7 +276,7 @@ POST /api/v1/tasks/123/join
 {
   "remind_flags": {
     "t_3d": true,
-    "t_1d": true, 
+    "t_1d": true,
     "ddl_2h": true
   }
 }

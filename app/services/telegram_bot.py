@@ -61,11 +61,15 @@ class TelegramBotService:
         if self.application:
             await self.application.initialize()
             await self.application.start()
-            logger.info("Telegram Bot started")
+            # Start polling for updates
+            await self.application.updater.start_polling()
+            logger.info("Telegram Bot started with polling")
 
     async def stop_bot(self):
         """Stop the Telegram Bot"""
         if self.application:
+            # Stop polling
+            await self.application.updater.stop()
             await self.application.stop()
             await self.application.shutdown()
             logger.info("Telegram Bot stopped")
@@ -109,11 +113,11 @@ class TelegramBotService:
             "🎯 Welcome to BoutyGo Notification Bot!\n\n"
             "This bot will send you task reminders and updates.\n\n"
             "Available commands:\n"
-            "/bind <user_token> - Bind your account\n"
+            "/bind <user_id> - Bind your account\n"
             "/unbind - Unbind your account\n"
             "/status - Check binding status\n"
             "/help - Show this help message\n\n"
-            "To get started, use /bind command with your user token from the BoutyGo app."
+            "To get started, use /bind command with your user ID from the BoutyGo app."
         )
 
         await update.message.reply_text(welcome_message)

@@ -42,6 +42,13 @@ def configure_logging() -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)  # 关闭SQL语句日志
 
+    # Suppress verbose HTTP logs from Telegram bot libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("telegram.ext.Application").setLevel(logging.INFO)
+    logging.getLogger("telegram.bot").setLevel(logging.INFO)
+    logging.getLogger("telegram").setLevel(logging.INFO)
+
 
 def get_logger(name: str) -> Any:
     """Get structured logger"""

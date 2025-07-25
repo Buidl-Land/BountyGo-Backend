@@ -49,7 +49,6 @@ class Settings(BaseSettings):
 
     # Telegram Bot
     TELEGRAM_BOT_TOKEN: Optional[str] = None
-    TELEGRAM_WEBHOOK_URL: Optional[str] = None
 
     # PPIO Model Configuration
     PPIO_API_KEY: str
