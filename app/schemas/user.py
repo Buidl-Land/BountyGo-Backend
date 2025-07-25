@@ -101,7 +101,7 @@ class TokenResponse(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     """Google OAuth authentication request"""
-    google_token: str
+    google_token: str = Field(..., min_length=1, description="Google OAuth ID token")
 
 
 class WalletAuthRequest(BaseModel):

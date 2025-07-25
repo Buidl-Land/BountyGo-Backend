@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, get_current_user_optional, SessionManager
-from app.schemas.user import TokenResponse, User
+from app.schemas.user import TokenResponse, User, GoogleAuthRequest, WalletAuthRequest
 from app.models.user import User as UserModel
 
 router = APIRouter()
@@ -145,3 +145,194 @@ async def optional_auth_endpoint(
             "message": "Hello anonymous user!",
             "authenticated": False
         }
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_login(
+    request: GoogleAuthRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Google OAuth login endpoint
+    """
+    try:
+        from app.services.google_auth import google_auth_service
+        
+        token_response = await google_auth_service.authenticate_with_google(
+            db, 
+            request.google_token
+        )
+        
+        return token_response
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
+@router.post("/google/revoke")
+async def google_revoke(
+    google_access_token: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Revoke Google OAuth access
+    """
+    try:
+        from app.services.google_auth import google_auth_service
+        
+        # 撤销Google访问权限
+        success = await google_auth_service.revoke_google_access(google_access_token)
+        
+        # 撤销本地refresh tokens
+        await SessionManager.revoke_session(db, current_user.id)
+        
+        return {
+            "message": "Google access revoked successfully",
+            "google_revoked": success
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke Google access: {str(e)}"
+        )
+
+
+# Web3 Wallet Authentication Endpoints
+
+@router.post("/wallet/nonce")
+async def get_wallet_nonce(wallet_address: str):
+    """
+    Generate authentication nonce for wallet address
+    
+    This endpoint generates a unique nonce that must be signed by the wallet
+    to prove ownership. The nonce expires after 5 minutes.
+    """
+    try:
+        from app.services.web3_auth import web3_auth_service
+        
+        # Generate nonce
+        nonce = web3_auth_service.generate_auth_nonce(wallet_address)
+        
+        # Get authentication message
+        message = web3_auth_service.get_auth_message(wallet_address, nonce)
+        
+        return {
+            "nonce": nonce,
+            "message": message,
+            "wallet_address": wallet_address,
+            "expires_in": 300  # 5 minutes
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/wallet/verify", response_model=TokenResponse)
+async def wallet_login(
+    auth_request: WalletAuthRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Authenticate user with wallet signature
+    
+    Verifies the wallet signature and returns JWT tokens if the wallet
+    is linked to a user account.
+    """
+    try:
+        from app.services.web3_auth import web3_auth_service
+        
+        token_response = await web3_auth_service.authenticate_wallet(
+            db, 
+            auth_request
+        )
+        
+        return token_response
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
+@router.post("/wallet/link")
+async def link_wallet(
+    auth_request: WalletAuthRequest,
+    is_primary: bool = False,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Link wallet to current user account
+    
+    Verifies the wallet signature and links the wallet to the authenticated user.
+    """
+    try:
+        from app.services.web3_auth import web3_auth_service
+        
+        wallet = await web3_auth_service.link_wallet_to_user(
+            db, 
+            current_user.id, 
+            auth_request,
+            is_primary
+        )
+        
+        return {
+            "message": "Wallet linked successfully",
+            "wallet": {
+                "id": wallet.id,
+                "wallet_address": wallet.wallet_address,
+                "wallet_type": wallet.wallet_type,
+                "is_primary": wallet.is_primary,
+                "created_at": wallet.created_at
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/wallet/{wallet_id}")
+async def unlink_wallet(
+    wallet_id: int,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Unlink wallet from current user account
+    """
+    try:
+        from app.services.web3_auth import web3_auth_service
+        
+        success = await web3_auth_service.unlink_wallet_from_user(
+            db, 
+            current_user.id, 
+            wallet_id
+        )
+        
+        if success:
+            return {"message": "Wallet unlinked successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Wallet not found or not owned by user"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unlink wallet: {str(e)}"
+        )
