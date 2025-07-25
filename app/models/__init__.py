@@ -5,13 +5,14 @@ from .base import Base, BaseModel, TimestampMixin
 from .user import User, UserWallet, RefreshToken
 from .tag import Tag, UserTagProfile
 from .task import Task, TaskTag, Todo, Message, TaskView
+from .notification import Notification, NotificationTemplate, UserNotificationPreference
 
 __all__ = [
-    "Base", 
-    "BaseModel", 
+    "Base",
+    "BaseModel",
     "TimestampMixin",
     "User",
-    "UserWallet", 
+    "UserWallet",
     "RefreshToken",
     "Tag",
     "UserTagProfile",
@@ -19,5 +20,8 @@ __all__ = [
     "TaskTag",
     "Todo",
     "Message",
-    "TaskView"
+    "TaskView",
+    "Notification",
+    "NotificationTemplate",
+    "UserNotificationPreference"
 ]

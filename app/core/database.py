@@ -16,7 +16,7 @@ def create_database_engine():
         # Try asyncpg first
         engine = create_async_engine(
             settings.DATABASE_URL,
-            echo=settings.DEBUG,
+            echo=False,  # 关闭SQL语句日志输出
             pool_size=settings.DATABASE_POOL_SIZE,
             max_overflow=settings.DATABASE_MAX_OVERFLOW,
             poolclass=NullPool if "pytest" in str(settings.DATABASE_URL) else None,
@@ -43,7 +43,7 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency to get database session
-    
+
     Yields:
         AsyncSession: Database session
     """
@@ -69,11 +69,11 @@ async def init_db() -> None:
             Tag, UserTagProfile,
             Task, TaskTag, Todo, Message, TaskView
         )
-        
+
         # Test connection
         async with engine.begin() as conn:
             logger.info("Database connection established successfully")
-            
+
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
@@ -92,15 +92,15 @@ async def close_db() -> None:
 
 class DatabaseManager:
     """Database manager for handling connections and sessions"""
-    
+
     def __init__(self):
         self.engine = engine
         self.session_factory = AsyncSessionLocal
-    
+
     async def health_check(self) -> bool:
         """
         Check database health
-        
+
         Returns:
             bool: True if database is healthy
         """
@@ -112,11 +112,11 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
             return False
-    
+
     async def get_session(self) -> AsyncSession:
         """
         Get a new database session
-        
+
         Returns:
             AsyncSession: Database session
         """

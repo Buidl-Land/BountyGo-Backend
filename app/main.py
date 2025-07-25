@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Database initialization failed: {e}")
         if not settings.DEBUG:
             raise e
-    
+
     try:
         await init_redis()
         logger.info("✅ Redis initialized successfully")
@@ -44,13 +44,47 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Redis initialization failed: {e}")
         if not settings.DEBUG:
             raise e
-    
+
+    # Initialize Telegram Bot
+    try:
+        from app.services.telegram_bot import telegram_bot_service
+        if settings.TELEGRAM_BOT_TOKEN:
+            await telegram_bot_service.start_bot()
+            logger.info("✅ Telegram Bot initialized successfully")
+        else:
+            logger.info("ℹ️ Telegram Bot token not configured, skipping initialization")
+    except Exception as e:
+        logger.warning(f"⚠️ Telegram Bot initialization failed: {e}")
+
+    # Start background schedulers
+    try:
+        from app.services.scheduler import scheduler_manager
+        await scheduler_manager.start_all()
+        logger.info("✅ Background schedulers started successfully")
+    except Exception as e:
+        logger.warning(f"⚠️ Background schedulers failed to start: {e}")
+
     yield
     # Shutdown
     try:
+        from app.services.scheduler import scheduler_manager
+        await scheduler_manager.stop_all()
+        logger.info("✅ Background schedulers stopped")
+    except Exception as e:
+        logger.warning(f"⚠️ Error stopping schedulers: {e}")
+
+    try:
+        from app.services.telegram_bot import telegram_bot_service
+        await telegram_bot_service.stop_bot()
+        logger.info("✅ Telegram Bot stopped")
+    except Exception as e:
+        logger.warning(f"⚠️ Error stopping Telegram Bot: {e}")
+
+    try:
         await close_db()
-    except:
-        pass
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.warning(f"⚠️ Error closing database: {e}")
 
 
 app = FastAPI(
@@ -160,9 +194,9 @@ app.include_router(api_router, prefix="/api/v1")
 async def health_check():
     """
     系统健康检查端点
-    
+
     检查数据库连接、Redis连接等系统组件状态
-    
+
     - **返回**: 系统健康状态信息
     """
     return await get_system_health()

@@ -11,7 +11,7 @@ from app.core.config import settings
 
 def configure_logging() -> None:
     """Configure application logging"""
-    
+
     # Configure structlog
     structlog.configure(
         processors=[
@@ -30,19 +30,17 @@ def configure_logging() -> None:
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
-    
+
     # Configure standard logging
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
         level=logging.DEBUG if settings.DEBUG else logging.INFO,
     )
-    
+
     # Set specific logger levels
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy.engine").setLevel(
-        logging.INFO if settings.DEBUG else logging.WARNING
-    )
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)  # 关闭SQL语句日志
 
 
 def get_logger(name: str) -> Any:

@@ -22,6 +22,7 @@ class UserUpdate(BaseModel):
     """Schema for updating a user"""
     nickname: Optional[str] = Field(None, min_length=1, max_length=100)
     avatar_url: Optional[str] = None
+    telegram_notifications_enabled: Optional[bool] = None
 
 
 class UserWalletBase(BaseModel):
@@ -42,7 +43,7 @@ class UserWallet(UserWalletBase):
     user_id: int
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -65,7 +66,7 @@ class RefreshToken(RefreshTokenBase):
     token_hash: str
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -73,11 +74,18 @@ class User(UserBase):
     """Schema for user response"""
     id: int
     is_active: bool
+    telegram_chat_id: Optional[str] = None
+    telegram_username: Optional[str] = None
+    telegram_notifications_enabled: bool = False
     created_at: datetime
     updated_at: datetime
-    wallets: List[UserWallet] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserWithWallets(User):
+    """User schema with wallets included"""
+    wallets: List[UserWallet] = []
 
 
 class UserProfile(User):

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent
+from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket
 
 api_router = APIRouter()
 
@@ -16,17 +16,19 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["📋 Tasks"])
 api_router.include_router(tags.router, prefix="/tags", tags=["🏷️ Tags"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["📊 Analytics"])
 api_router.include_router(url_agent.router, prefix="/url-agent", tags=["🤖 URL Agent"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["🔔 Notifications"])
+api_router.include_router(websocket.router, prefix="/ws", tags=["🔌 WebSocket"])
 
 
 @api_router.get("/", summary="API信息", tags=["ℹ️ System"])
 async def api_info():
     """
     获取API基本信息
-    
+
     - **返回**: API版本和状态信息
     """
     from app.core.config import settings
-    
+
     info = {
         "message": "BountyGo API v1",
         "version": "1.0.0",
@@ -40,7 +42,11 @@ async def api_info():
             "数据分析和统计",
             "Web3钱包集成",
             "AI驱动的URL内容提取",
-            "智能任务信息解析"
+            "智能任务信息解析",
+            "任务提醒和通知系统",
+            "Telegram Bot集成",
+            "WebSocket实时通知",
+            "个人任务待办列表管理"
         ],
         "endpoints": {
             "authentication": "/api/v1/auth",
@@ -48,7 +54,9 @@ async def api_info():
             "tasks": "/api/v1/tasks",
             "tags": "/api/v1/tags",
             "analytics": "/api/v1/analytics",
-            "url_agent": "/api/v1/url-agent"
+            "url_agent": "/api/v1/url-agent",
+            "notifications": "/api/v1/notifications",
+            "websocket": "/api/v1/ws"
         },
         "authentication": {
             "required_for": [
@@ -70,14 +78,14 @@ async def api_info():
             ]
         }
     }
-    
+
     # 开发环境添加测试信息
     if settings.is_development():
         dev_info = {
             "environment": "development",
             "test_user": settings.DEV_TEST_USER_EMAIL
         }
-        
+
         if settings.is_dev_test_token_enabled():
             dev_info.update({
                 "test_token": settings.get_dev_test_token(),
@@ -85,9 +93,9 @@ async def api_info():
             })
         else:
             dev_info["note"] = "开发测试token未配置。请在环境变量中设置 DEV_TEST_TOKEN"
-        
+
         info["development"] = dev_info
-    
+
     return info
 
 
@@ -95,17 +103,17 @@ async def api_info():
 async def dev_auth_info():
     """
     开发环境认证说明
-    
+
     - **返回**: 开发环境认证方式说明
     """
     from app.core.config import settings
-    
+
     if not settings.is_development():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="此端点仅在开发环境可用"
         )
-    
+
     if not settings.is_dev_test_token_enabled():
         return {
             "message": "开发环境认证说明",
@@ -117,7 +125,7 @@ async def dev_auth_info():
                 "3. 使用该token进行API测试"
             ]
         }
-    
+
     test_token = settings.get_dev_test_token()
     return {
         "message": "开发环境认证说明",
