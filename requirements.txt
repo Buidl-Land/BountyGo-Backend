@@ -23,6 +23,11 @@ google-auth-httplib2==0.2.0
 # HTTP client
 httpx==0.25.2
 
+# Web3 and Ethereum
+web3==6.15.1
+eth-account==0.10.0
+eth-utils==2.3.1
+
 # Configuration
 pydantic[email]==2.5.0
 pydantic-settings==2.1.0
