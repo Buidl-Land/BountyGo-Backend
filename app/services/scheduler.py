@@ -62,7 +62,9 @@ class NotificationScheduler:
 
     async def _process_notifications(self):
         """处理待发送的通知"""
-        async for db in get_db():
+        from app.core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
             try:
                 # 发送Telegram通知
                 await telegram_notification_sender.send_pending_notifications(db)
@@ -74,8 +76,7 @@ class NotificationScheduler:
 
             except Exception as e:
                 logger.error(f"Error processing notifications: {e}")
-            finally:
-                await db.close()
+                await db.rollback()
 
 
 class TaskReminderSchedulerService:
@@ -125,11 +126,12 @@ class TaskReminderSchedulerService:
 
     async def _schedule_upcoming_reminders(self):
         """为即将到期的任务安排提醒"""
-        async for db in get_db():
-            try:
-                from sqlalchemy import select
-                from app.models.task import Task
+        from app.core.database import AsyncSessionLocal
+        from sqlalchemy import select
+        from app.models.task import Task
 
+        async with AsyncSessionLocal() as db:
+            try:
                 # 查找未来7天内到期的任务
                 future_date = datetime.utcnow() + timedelta(days=7)
 
@@ -151,8 +153,7 @@ class TaskReminderSchedulerService:
 
             except Exception as e:
                 logger.error(f"Error scheduling task reminders: {e}")
-            finally:
-                await db.close()
+                await db.rollback()
 
 
 class SchedulerManager:

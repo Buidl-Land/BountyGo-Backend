@@ -135,7 +135,8 @@ class TelegramBotService:
         username = update.effective_user.username
 
         # 验证token并绑定账号
-        async for db in get_db():
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
             try:
                 # 查找用户
                 result = await db.execute(
@@ -185,14 +186,14 @@ class TelegramBotService:
                     "❌ An error occurred while binding your account.\n\n"
                     "Please try again later or contact support."
                 )
-            finally:
-                await db.close()
+                await db.rollback()
 
     async def unbind_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /unbind command"""
         chat_id = str(update.effective_chat.id)
 
-        async for db in get_db():
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
             try:
                 # 查找绑定的用户
                 result = await db.execute(
@@ -233,14 +234,14 @@ class TelegramBotService:
                     "❌ An error occurred while unbinding your account.\n\n"
                     "Please try again later or contact support."
                 )
-            finally:
-                await db.close()
+                await db.rollback()
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
         chat_id = str(update.effective_chat.id)
 
-        async for db in get_db():
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
             try:
                 # 查找绑定的用户
                 result = await db.execute(
@@ -272,8 +273,7 @@ class TelegramBotService:
                     "❌ An error occurred while checking your account status.\n\n"
                     "Please try again later or contact support."
                 )
-            finally:
-                await db.close()
+                await db.rollback()
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""

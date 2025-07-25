@@ -61,8 +61,16 @@ class TelegramBotService:
         if self.application:
             await self.application.initialize()
             await self.application.start()
+            # Clear any pending updates first
+            try:
+                await self.bot.get_updates(offset=-1, limit=1)
+            except Exception:
+                pass  # Ignore errors when clearing updates
+
             # Start polling for updates
-            await self.application.updater.start_polling()
+            await self.application.updater.start_polling(
+                drop_pending_updates=True  # Drop any pending updates
+            )
             logger.info("Telegram Bot started with polling")
 
     async def stop_bot(self):
