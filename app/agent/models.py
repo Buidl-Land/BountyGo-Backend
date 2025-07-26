@@ -38,6 +38,7 @@ class TaskInfo(BaseModel):
     reward_details: Optional[str] = Field(None, description="奖励详情")
     reward_type: Optional[str] = Field(None, description="奖励分类：每人、瓜分、抽奖、积分、权益")
     organizer_name: Optional[str] = Field(None, description="主办方名称")
+    external_link: Optional[str] = Field(None, description="活动原始链接")
 
 
 class TaskProcessResult(BaseModel):

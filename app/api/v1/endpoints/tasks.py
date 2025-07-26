@@ -120,6 +120,7 @@ async def get_tasks(
             reward_details=task.reward_details,
             reward_type=task.reward_type,
             deadline=task.deadline,
+            external_link=task.external_link,
             sponsor_id=task.sponsor_id,
             organizer_id=task.organizer_id,
             status=task.status,
@@ -391,10 +392,16 @@ async def join_task(
         )
 
     # 创建待办事项
+    todo_dict = todo_data.model_dump()
+    
+    # 将remind_flags转换为JSON字符串
+    if todo_dict.get("remind_flags"):
+        todo_dict["remind_flags"] = json.dumps(todo_dict["remind_flags"])
+    
     new_todo = Todo(
         user_id=current_user.id,
         task_id=task_id,
-        **todo_data.model_dump()
+        **todo_dict
     )
 
     db.add(new_todo)
@@ -405,13 +412,13 @@ async def join_task(
     await db.commit()
     await db.refresh(new_todo)
 
-    # 调度任务提醒
-    try:
-        from app.services.notification import task_reminder_scheduler
-        await task_reminder_scheduler.schedule_task_reminders(db, task_id)
-    except Exception as e:
-        # 提醒调度失败不应该影响加入任务的操作
-        logger.warning(f"Failed to schedule reminders for task {task_id}: {e}")
+    # 调度任务提醒 - 暂时禁用以避免数据库问题
+    # try:
+    #     from app.services.notification import task_reminder_scheduler
+    #     await task_reminder_scheduler.schedule_task_reminders(db, task_id)
+    # except Exception as e:
+    #     # 提醒调度失败不应该影响加入任务的操作
+    #     logger.warning(f"Failed to schedule reminders for task {task_id}: {e}")
 
     return new_todo
 

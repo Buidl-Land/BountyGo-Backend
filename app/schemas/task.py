@@ -77,6 +77,7 @@ class TaskSummary(BaseModel):
     reward_details: Optional[str] = None
     reward_type: Optional[str] = None
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
+    external_link: Optional[str] = None
     sponsor_id: int
     organizer_id: Optional[int] = None
     status: TaskStatus

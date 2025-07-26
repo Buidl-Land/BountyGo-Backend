@@ -41,6 +41,7 @@ class ParseResponse(BaseModel):
     reward_type: Optional[str] = None
     organizer_name: Optional[str] = None
     organizer: Optional[OrganizerResponse] = None
+    external_link: Optional[str] = None
     source_url: Optional[str] = None
 
 
@@ -71,12 +72,17 @@ async def parse_content(
 
     try:
         # 初始化解析代理
-        agent = URLParsingAgent()
+        from app.agent.config import url_agent_settings
+        ppio_config = url_agent_settings.get_ppio_config()
+        agent = URLParsingAgent(ppio_config)
 
         # 解析内容
         if request.url:
-            # URL解析
-            task_info = await agent.extract_task_info(str(request.url))
+            # URL解析 - 先提取网页内容，再分析
+            from app.agent.content_extractor import ContentExtractor
+            content_extractor = ContentExtractor()
+            web_content = await content_extractor.extract_content(str(request.url))
+            task_info = await agent.analyze_content(web_content)
             source_url = str(request.url)
         else:
             # 文本解析
@@ -124,6 +130,7 @@ async def parse_content(
             reward_type=task_info.reward_type,
             organizer_name=task_info.organizer_name,
             organizer=organizer_response,
+            external_link=task_info.external_link,
             source_url=source_url
         )
 

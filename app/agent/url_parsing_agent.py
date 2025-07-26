@@ -51,7 +51,8 @@ class URLParsingAgent:
     "category": "任务分类或null",
     "reward_details": "奖励详情描述或null",
     "reward_type": "奖励分类或null",
-    "organizer_name": "主办方名称或null"
+    "organizer_name": "主办方名称或null",
+    "external_link": "活动原始链接或null"
 }
 
 分析时请注意：
@@ -315,15 +316,17 @@ class URLParsingAgent:
 
 请严格按照JSON格式返回结果。"""
 
+            # 构建消息
+            messages = [
+                {"role": "system", "content": self._get_system_prompt()},
+                {"role": "user", "content": user_prompt}
+            ]
+
             # 调用AI分析
-            response = await self.client.chat_completion(
-                system_prompt=self._get_system_prompt(),
-                user_prompt=user_prompt,
-                temperature=0.1
-            )
+            response = await self.client.chat_completion(messages)
 
             # 解析响应
-            task_info = self._parse_ai_response(response)
+            task_info = self._parse_response(response)
 
             logger.info(f"Content analysis completed: {task_info.title}")
             return task_info
