@@ -204,7 +204,7 @@ class TaskReminderMessage(BaseModel):
     type: str = "task_reminder"
     task_id: int
     task_title: str
-    deadline: datetime
+    deadline: int
     reminder_type: NotificationType
     message: str
     timestamp: datetime

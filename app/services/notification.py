@@ -376,8 +376,10 @@ class TaskReminderScheduler:
         if (remind_flags.get("t_3d", True) and
             preferences.task_reminder_3d_enabled):
 
-            reminder_time = task.deadline - timedelta(days=3)
-            if reminder_time > datetime.utcnow():
+            reminder_timestamp = task.deadline - (3 * 24 * 3600)  # 3 days in seconds
+            current_timestamp = int(datetime.utcnow().timestamp())
+            if reminder_timestamp > current_timestamp:
+                reminder_time = datetime.fromtimestamp(reminder_timestamp)
                 await self._create_reminder(
                     db, user.id, task.id,
                     NotificationType.TASK_REMINDER_3D,
@@ -388,8 +390,10 @@ class TaskReminderScheduler:
         if (remind_flags.get("t_1d", True) and
             preferences.task_reminder_1d_enabled):
 
-            reminder_time = task.deadline - timedelta(days=1)
-            if reminder_time > datetime.utcnow():
+            reminder_timestamp = task.deadline - (1 * 24 * 3600)  # 1 day in seconds
+            current_timestamp = int(datetime.utcnow().timestamp())
+            if reminder_timestamp > current_timestamp:
+                reminder_time = datetime.fromtimestamp(reminder_timestamp)
                 await self._create_reminder(
                     db, user.id, task.id,
                     NotificationType.TASK_REMINDER_1D,
@@ -400,8 +404,10 @@ class TaskReminderScheduler:
         if (remind_flags.get("ddl_2h", True) and
             preferences.task_reminder_2h_enabled):
 
-            reminder_time = task.deadline - timedelta(hours=2)
-            if reminder_time > datetime.utcnow():
+            reminder_timestamp = task.deadline - (2 * 3600)  # 2 hours in seconds
+            current_timestamp = int(datetime.utcnow().timestamp())
+            if reminder_timestamp > current_timestamp:
+                reminder_time = datetime.fromtimestamp(reminder_timestamp)
                 await self._create_reminder(
                     db, user.id, task.id,
                     NotificationType.TASK_REMINDER_2H,

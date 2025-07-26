@@ -48,5 +48,7 @@ __all__ = [
     "TaskFilters", "TaskList", "Pagination",
     "Todo", "TodoCreate", "TodoUpdate",
     "Message", "MessageCreate", "MessageUpdate", "MessageList",
-    "TaskAnalytics", "SponsorDashboard", "TaskView", "ExportData"
+    "TaskAnalytics", "SponsorDashboard", "TaskView", "ExportData",
+    # Organizer
+    "Organizer", "OrganizerCreate", "OrganizerUpdate", "OrganizerSummary"
 ]

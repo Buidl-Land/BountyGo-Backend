@@ -3,9 +3,27 @@ Task-related database models
 """
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import String, Text, DECIMAL, Integer, Boolean, ForeignKey, DateTime, UniqueConstraint
+from enum import Enum
+from sqlalchemy import String, Text, DECIMAL, Integer, Boolean, ForeignKey, DateTime, UniqueConstraint, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
+
+
+
+
+
+class Organizer(Base, TimestampMixin):
+    """任务主办方模型"""
+    __tablename__ = "organizers"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # 关联关系
+    tasks: Mapped[List["Task"]] = relationship(
+        "Task", back_populates="organizer", cascade="all, delete-orphan"
+    )
 
 
 class Task(Base, TimestampMixin):
@@ -14,21 +32,20 @@ class Task(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, comment="任务简介")
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    reward: Mapped[Optional[float]] = mapped_column(DECIMAL(18, 6), nullable=True)
-    reward_currency: Mapped[str] = mapped_column(String(10), default="USD", nullable=False)
-    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="任务分类")
+    deadline: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="截止日期时间戳")
     sponsor_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    external_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    organizer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("organizers.id", ondelete="SET NULL"), nullable=True)
+    external_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="活动原始链接")
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     join_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    has_escrow: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    escrow_amount: Mapped[Optional[float]] = mapped_column(DECIMAL(18, 6), nullable=True)
-    escrow_token: Mapped[Optional[str]] = mapped_column(String(42), nullable=True)
 
     # Relationships
     sponsor: Mapped["User"] = relationship("User", back_populates="sponsored_tasks")
+    organizer: Mapped[Optional["Organizer"]] = relationship("Organizer", back_populates="tasks")
     task_tags: Mapped[List["TaskTag"]] = relationship(
         "TaskTag", back_populates="task", cascade="all, delete-orphan"
     )
@@ -65,12 +82,15 @@ class TaskTag(Base, TimestampMixin):
 
 
 class Todo(Base, TimestampMixin):
-    """User todo items for joined tasks"""
+    """User todo items - can be linked to tasks or be personal todos"""
     __tablename__ = "todos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, comment="自定义todo标题")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="自定义todo描述")
+    deadline: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="自定义截止时间戳")
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default="NOW()")
     remind_flags: Mapped[Optional[str]] = mapped_column(
         Text,
@@ -78,15 +98,14 @@ class Todo(Base, TimestampMixin):
         nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment="是否已完成")
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="todos")
-    task: Mapped["Task"] = relationship("Task", back_populates="todos")
+    task: Mapped[Optional["Task"]] = relationship("Task", back_populates="todos")
 
-    # Constraints
-    __table_args__ = (
-        UniqueConstraint("user_id", "task_id", name="uq_user_task"),
-    )
+    # Constraints - 移除唯一约束，允许用户创建多个相同任务的todo或私人todo
+    __table_args__ = ()
 
 
 class Message(Base, TimestampMixin):
