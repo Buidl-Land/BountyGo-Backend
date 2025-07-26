@@ -15,6 +15,7 @@ python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.6
 fastapi-clerk-auth>=0.0.7
+PyJWT[crypto]>=2.8.0
 
 # Google OAuth
 google-auth>=2.23.4

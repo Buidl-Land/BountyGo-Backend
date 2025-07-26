@@ -43,6 +43,7 @@ async def get_tasks(
     tag_ids: Optional[str] = Query(None, description="标签ID列表，逗号分隔"),
     category: Optional[str] = Query(None, description="任务分类筛选"),
     search: Optional[str] = Query(None, description="搜索关键词"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -109,9 +110,46 @@ async def get_tasks(
     result = await db.execute(query)
     tasks = result.scalars().all()
 
+    # 如果用户已登录，查询用户的todo状态
+    user_todos = {}
+    if current_user:
+        task_ids = [task.id for task in tasks]
+        if task_ids:
+            todos_query = select(Todo).where(
+                and_(
+                    Todo.user_id == current_user.id,
+                    Todo.task_id.in_(task_ids)
+                )
+            )
+            todos_result = await db.execute(todos_query)
+            todos = todos_result.scalars().all()
+
+            for todo in todos:
+                user_todos[todo.task_id] = {
+                    "todo_id": todo.id,
+                    "is_joined": True,
+                    "is_completed": todo.is_completed,
+                    "is_active": todo.is_active,
+                    "added_at": todo.added_at.isoformat() if todo.added_at else None
+                }
+
     # 转换为TaskSummary
     task_summaries = []
     for task in tasks:
+        # 获取用户todo状态
+        user_todo_status = None
+        if current_user:
+            if task.id in user_todos:
+                user_todo_status = user_todos[task.id]
+            else:
+                user_todo_status = {
+                    "todo_id": None,
+                    "is_joined": False,
+                    "is_completed": False,
+                    "is_active": False,
+                    "added_at": None
+                }
+
         task_summary = TaskSummary(
             id=task.id,
             title=task.title,
@@ -132,7 +170,8 @@ async def get_tasks(
                 id=task.organizer.id,
                 name=task.organizer.name,
                 is_verified=task.organizer.is_verified
-            ) if task.organizer else None
+            ) if task.organizer else None,
+            user_todo_status=user_todo_status
         )
         task_summaries.append(task_summary)
 

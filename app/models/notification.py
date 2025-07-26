@@ -71,8 +71,8 @@ class NotificationTemplate(Base, TimestampMixin):
     __tablename__ = "notification_templates"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    type: Mapped[NotificationType] = mapped_column(SQLEnum(NotificationType), nullable=False)
-    channel: Mapped[NotificationChannel] = mapped_column(SQLEnum(NotificationChannel), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    channel: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # Template content
     title_template: Mapped[str] = mapped_column(String(255), nullable=False)

@@ -88,6 +88,9 @@ class TaskSummary(BaseModel):
     tags: List[Tag] = []
     organizer: Optional[OrganizerSummary] = None
 
+    # 用户todo状态字段（仅在用户登录时返回）
+    user_todo_status: Optional[Dict[str, Any]] = Field(None, description="用户todo状态")
+
     model_config = ConfigDict(from_attributes=True)
 
 

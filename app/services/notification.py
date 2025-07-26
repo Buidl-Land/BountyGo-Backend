@@ -66,7 +66,7 @@ class NotificationService(BaseService[Notification, NotificationCreate, Notifica
         notification_data = NotificationCreate(
             user_id=user_id,
             task_id=task_id,
-            type=reminder_type,
+            type=reminder_type.value,
             channel=channel,
             title=title,
             message=message,
@@ -87,7 +87,7 @@ class NotificationService(BaseService[Notification, NotificationCreate, Notifica
             select(NotificationTemplate)
             .where(
                 and_(
-                    NotificationTemplate.type == notification_type,
+                    NotificationTemplate.type == notification_type.value,
                     NotificationTemplate.channel == channel,
                     NotificationTemplate.is_active == True
                 )
@@ -141,7 +141,7 @@ class NotificationService(BaseService[Notification, NotificationCreate, Notifica
             raise ValidationError(f"No default template for {notification_type}")
 
         template = NotificationTemplate(
-            type=notification_type,
+            type=notification_type.value,
             channel=channel,
             title_template=template_data["title"],
             message_template=template_data["message"],

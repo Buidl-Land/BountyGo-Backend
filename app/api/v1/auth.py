@@ -14,13 +14,20 @@ router = APIRouter()
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    refresh_token: str,
+    request: dict,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Refresh access token using refresh token
     """
     try:
+        refresh_token = request.get("refresh_token")
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="refresh_token is required"
+            )
+
         token_response = await SessionManager.refresh_session(db, refresh_token)
         return TokenResponse(**token_response)
     except Exception as e:
@@ -32,7 +39,7 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    refresh_token: str,
+    request: dict,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -40,6 +47,7 @@ async def logout(
     Logout user by revoking refresh token
     """
     try:
+        refresh_token = request.get("refresh_token")
         success = await SessionManager.revoke_session(
             db,
             current_user.id,
@@ -281,10 +289,96 @@ async def clerk_login(
         return token_response
 
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Clerk authentication failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e)
         )
+
+
+@router.post("/clerk/debug")
+async def debug_clerk_token(
+    request: ClerkAuthRequest
+):
+    """
+    Debug endpoint to analyze Clerk token structure
+    """
+    try:
+        from app.services.clerk_auth import clerk_auth_service
+
+        if not clerk_auth_service.is_enabled:
+            return {
+                "error": "Clerk authentication is not configured",
+                "clerk_enabled": False
+            }
+
+        # Basic token info
+        token = request.clerk_token
+        debug_info = {
+            "token_length": len(token),
+            "token_prefix": token[:50] if len(token) > 50 else token,
+            "token_suffix": token[-20:] if len(token) > 20 else "",
+            "is_mock_token": token.startswith("mock_"),
+            "clerk_enabled": True
+        }
+
+        # Try to verify and decode the token
+        try:
+            payload = await clerk_auth_service.verify_clerk_token(token)
+
+            if payload:
+                debug_info.update({
+                    "verification_success": True,
+                    "payload": payload,
+                    "available_fields": list(payload.keys()),
+                    "user_info": {
+                        "sub": payload.get("sub"),
+                        "email": payload.get("email"),
+                        "email_address": payload.get("email_address"),
+                        "primary_email_address": payload.get("primary_email_address"),
+                        "email_addresses": payload.get("email_addresses"),
+                        "username": payload.get("username"),
+                        "name": payload.get("name"),
+                        "first_name": payload.get("first_name"),
+                        "last_name": payload.get("last_name"),
+                        "picture": payload.get("picture"),
+                        "image_url": payload.get("image_url")
+                    }
+                })
+
+                # If we have a user ID, try to get user info from Clerk API
+                user_id = payload.get("sub")
+                if user_id and not user_id.startswith("user_mock_"):
+                    try:
+                        user_info = await clerk_auth_service._get_clerk_user_info(user_id)
+                        debug_info["api_user_info"] = user_info
+                        debug_info["api_call_success"] = True
+                    except Exception as api_e:
+                        debug_info["api_call_success"] = False
+                        debug_info["api_error"] = str(api_e)
+
+            else:
+                debug_info.update({
+                    "verification_success": False,
+                    "error": "Token verification returned None"
+                })
+
+        except Exception as verify_e:
+            debug_info.update({
+                "verification_success": False,
+                "verification_error": str(verify_e)
+            })
+
+        return debug_info
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "clerk_enabled": clerk_auth_service.is_enabled if 'clerk_auth_service' in locals() else False
+        }
 
 
 @router.post("/clerk/link")
