@@ -42,95 +42,99 @@ class TestURLParsingAgent:
         """示例AI响应"""
         return {
             "title": "Python Web应用开发",
-            "description": "使用FastAPI框架开发Web应用",
+            "summary": "使用FastAPI框架开发Web应用",
+            "description": "使用FastAPI框架开发Web应用，包括数据库设计和API开发",
+            "category": "开发实战",
+            "reward_details": "一等奖500 USD",
+            "reward_type": "每人",
             "reward": 500.0,
             "reward_currency": "USD",
-            "deadline": "2024-12-31",
+            "deadline": 1735689600,
             "tags": ["python", "fastapi", "web开发"],
             "difficulty_level": "中级",
-            "estimated_hours": 40
+            "estimated_hours": 40,
+            "organizer_name": "测试主办方",
+            "external_link": "https://example.com/task"
         }
     
-    @patch('app.agent.url_parsing_agent.ModelFactory')
-    @patch('app.agent.url_parsing_agent.ChatAgent')
-    def test_agent_initialization(self, mock_chat_agent, mock_model_factory, mock_config):
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_agent_initialization(self, mock_client_class, mock_config):
         """测试代理初始化"""
-        mock_model = Mock()
-        mock_model_factory.create.return_value = mock_model
-        mock_agent_instance = Mock()
-        mock_chat_agent.return_value = mock_agent_instance
+        mock_client_instance = Mock()
+        mock_client_class.return_value = mock_client_instance
         
         agent = URLParsingAgent(mock_config)
         
-        # 验证模型工厂调用
-        mock_model_factory.create.assert_called_once()
-        call_args = mock_model_factory.create.call_args
-        assert call_args[1]["model_config_dict"]["api_key"] == mock_config.api_key
-        assert call_args[1]["model_config_dict"]["model"] == mock_config.model_name
-        
-        # 验证代理创建
-        mock_chat_agent.assert_called_once()
-        assert agent.agent == mock_agent_instance
+        # 验证PPIO客户端创建
+        mock_client_class.assert_called_once_with(mock_config)
+        assert agent.client == mock_client_instance
     
-    @patch('app.agent.url_parsing_agent.ModelFactory')
-    @patch('app.agent.url_parsing_agent.ChatAgent')
-    def test_agent_initialization_failure(self, mock_chat_agent, mock_model_factory, mock_config):
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_agent_initialization_failure(self, mock_client_class, mock_config):
         """测试代理初始化失败"""
-        mock_model_factory.create.side_effect = Exception("Model creation failed")
+        mock_client_class.side_effect = Exception("Client creation failed")
         
         with pytest.raises(ConfigurationError):
             URLParsingAgent(mock_config)
     
-    def test_system_message_generation(self, mock_config):
-        """测试系统消息生成"""
-        with patch('app.agent.url_parsing_agent.ModelFactory'), \
-             patch('app.agent.url_parsing_agent.ChatAgent'):
-            agent = URLParsingAgent(mock_config)
-            system_message = agent._get_system_message()
-            
-            assert "URL内容分析专家" in system_message.content
-            assert "JSON格式" in system_message.content
-            assert "title" in system_message.content
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_system_prompt_generation(self, mock_client_class, mock_config):
+        """测试系统提示生成"""
+        mock_client_class.return_value = Mock()
+        agent = URLParsingAgent(mock_config)
+        system_prompt = agent._get_system_prompt()
+        
+        assert "URL内容分析专家" in system_prompt
+        assert "JSON格式" in system_prompt
+        assert "title" in system_prompt
     
-    def test_build_analysis_content(self, mock_config, sample_web_content):
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_build_analysis_content(self, mock_client_class, mock_config, sample_web_content):
         """测试分析内容构建"""
-        with patch('app.agent.url_parsing_agent.ModelFactory'), \
-             patch('app.agent.url_parsing_agent.ChatAgent'):
-            agent = URLParsingAgent(mock_config)
-            content = agent._build_analysis_content(sample_web_content)
-            
-            assert sample_web_content.url in content
-            assert sample_web_content.title in content
-            assert sample_web_content.content in content
-            assert sample_web_content.meta_description in content
+        mock_client_class.return_value = Mock()
+        agent = URLParsingAgent(mock_config)
+        content = agent._build_analysis_content(sample_web_content)
+        
+        assert sample_web_content.url in content
+        assert sample_web_content.title in content
+        assert sample_web_content.content in content
+        assert sample_web_content.meta_description in content
     
-    def test_parse_response_success(self, mock_config, sample_ai_response):
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_parse_response_success(self, mock_client_class, mock_config, sample_ai_response):
         """测试响应解析成功"""
-        with patch('app.agent.url_parsing_agent.ModelFactory'), \
-             patch('app.agent.url_parsing_agent.ChatAgent'):
-            agent = URLParsingAgent(mock_config)
-            
-            response_json = json.dumps(sample_ai_response)
-            task_info = agent._parse_response(response_json)
-            
-            assert isinstance(task_info, TaskInfo)
-            assert task_info.title == sample_ai_response["title"]
-            assert task_info.reward == sample_ai_response["reward"]
-            assert task_info.reward_currency == sample_ai_response["reward_currency"]
-            assert len(task_info.tags) == 3
-            assert task_info.difficulty_level == sample_ai_response["difficulty_level"]
+        mock_client_class.return_value = Mock()
+        agent = URLParsingAgent(mock_config)
+        
+        response_json = json.dumps(sample_ai_response)
+        task_info = agent._parse_response(response_json)
+        
+        assert isinstance(task_info, TaskInfo)
+        assert task_info.title == sample_ai_response["title"]
+        assert task_info.summary == sample_ai_response["summary"]
+        assert task_info.category == sample_ai_response["category"]
+        assert task_info.reward_details == sample_ai_response["reward_details"]
+        assert task_info.reward_type == sample_ai_response["reward_type"]
+        assert task_info.reward == sample_ai_response["reward"]
+        assert task_info.reward_currency == sample_ai_response["reward_currency"]
+        assert task_info.deadline == sample_ai_response["deadline"]
+        assert len(task_info.tags) == 3
+        assert task_info.difficulty_level == sample_ai_response["difficulty_level"]
+        assert task_info.estimated_hours == sample_ai_response["estimated_hours"]
+        assert task_info.organizer_name == sample_ai_response["organizer_name"]
+        assert task_info.external_link == sample_ai_response["external_link"]
     
-    def test_parse_response_with_markdown(self, mock_config, sample_ai_response):
+    @patch('app.agent.url_parsing_agent.PPIOModelClient')
+    def test_parse_response_with_markdown(self, mock_client_class, mock_config, sample_ai_response):
         """测试解析带markdown标记的响应"""
-        with patch('app.agent.url_parsing_agent.ModelFactory'), \
-             patch('app.agent.url_parsing_agent.ChatAgent'):
-            agent = URLParsingAgent(mock_config)
-            
-            response_json = f"```json\n{json.dumps(sample_ai_response)}\n```"
-            task_info = agent._parse_response(response_json)
-            
-            assert isinstance(task_info, TaskInfo)
-            assert task_info.title == sample_ai_response["title"]
+        mock_client_class.return_value = Mock()
+        agent = URLParsingAgent(mock_config)
+        
+        response_json = f"```json\n{json.dumps(sample_ai_response)}\n```"
+        task_info = agent._parse_response(response_json)
+        
+        assert isinstance(task_info, TaskInfo)
+        assert task_info.title == sample_ai_response["title"]
     
     def test_parse_response_invalid_json(self, mock_config):
         """测试解析无效JSON响应"""

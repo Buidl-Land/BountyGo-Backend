@@ -16,7 +16,7 @@ from app.core.middleware import (
     security_headers_middleware
 )
 from app.core.rate_limit import rate_limit_middleware
-from app.core.health import get_system_health
+from app.core.health import check_health, check_basic_health, get_health_history
 from app.core.exceptions import BountyGoException
 from app.api.v1.api import api_router
 
@@ -102,6 +102,9 @@ app = FastAPI(
     - 💬 **讨论系统**: 任务讨论和实时消息
     - 📊 **数据分析**: 用户行为分析和任务统计
     - 🤖 **AI代理**: 智能URL内容提取和任务信息解析
+    - 🧠 **多智能体系统**: 智能协调、推荐引擎、图像解析
+    - 🔔 **通知系统**: 实时通知、Telegram Bot集成
+    - 🔌 **WebSocket**: 实时通信和状态同步
 
     ### 技术特性
     - ⚡ **异步架构**: 基于FastAPI的高性能异步API
@@ -115,6 +118,9 @@ app = FastAPI(
     2. 使用 `/api/v1/users/me` 管理个人资料
     3. 通过 `/api/v1/tasks` 浏览和创建任务
     4. 使用 `/api/v1/tags` 管理标签和兴趣配置
+    5. 通过 `/api/v1/multi-agent` 访问智能推荐和多智能体服务
+    6. 使用 `/api/v1/notifications` 管理通知和提醒
+    7. 通过 `/api/v1/ws` 建立WebSocket实时连接
     """,
     version="1.0.0",
     lifespan=lifespan,
@@ -165,6 +171,18 @@ app = FastAPI(
         {
             "name": "🤖 URL Agent",
             "description": "AI驱动的URL内容提取和任务信息解析"
+        },
+        {
+            "name": "🧠 Multi-Agent",
+            "description": "多智能体系统和协调服务"
+        },
+        {
+            "name": "🔔 Notifications",
+            "description": "通知系统和消息推送"
+        },
+        {
+            "name": "🔌 WebSocket",
+            "description": "WebSocket实时通信"
         }
     ]
 )
@@ -190,16 +208,40 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/health", summary="健康检查", tags=["ℹ️ System"])
-async def health_check():
+@app.get("/health", summary="基本健康检查", tags=["ℹ️ System"])
+async def basic_health_check():
     """
-    系统健康检查端点
-
+    基本健康检查端点（快速响应）
+    
+    返回基本的系统状态信息，用于负载均衡器健康检查
     检查数据库连接、Redis连接等系统组件状态
-
-    - **返回**: 系统健康状态信息
+    
+    - **返回**: 基本健康状态信息
     """
-    return await get_system_health()
+    return await check_basic_health()
+
+
+@app.get("/health/full", summary="完整健康检查", tags=["ℹ️ System"])
+async def full_health_check():
+    """
+    完整健康检查端点
+    
+    检查所有系统组件的详细状态，包括数据库、Redis、Agent系统等
+    
+    - **返回**: 详细的系统健康状态信息
+    """
+    return await check_health()
+
+
+@app.get("/health/history", summary="健康检查历史", tags=["ℹ️ System"])
+async def health_check_history(limit: int = 10):
+    """
+    获取健康检查历史记录
+    
+    - **limit**: 返回记录数量限制（默认10条）
+    - **返回**: 历史健康检查记录
+    """
+    return get_health_history(limit)
 
 
 if __name__ == "__main__":

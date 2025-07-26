@@ -37,6 +37,11 @@ class TaskInfo(BaseModel):
     category: Optional[str] = Field(None, description="任务分类：黑客松、征文、Meme创作、Web3交互、推特抽奖、开发实战")
     reward_details: Optional[str] = Field(None, description="奖励详情")
     reward_type: Optional[str] = Field(None, description="奖励分类：每人、瓜分、抽奖、积分、权益")
+    reward: Optional[Decimal] = Field(None, description="奖励金额")
+    reward_currency: Optional[str] = Field(None, description="奖励货币")
+    tags: Optional[List[str]] = Field(None, description="任务标签列表")
+    difficulty_level: Optional[str] = Field(None, description="难度等级")
+    estimated_hours: Optional[int] = Field(None, description="预估工时")
     organizer_name: Optional[str] = Field(None, description="主办方名称")
     external_link: Optional[str] = Field(None, description="活动原始链接")
 

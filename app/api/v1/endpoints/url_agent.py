@@ -2,10 +2,11 @@
 URL代理API端点 - 智能URL内容提取和任务创建
 """
 import logging
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, HttpUrl, Field
+import base64
 
 from app.core.database import get_db
 from app.core.auth import get_current_user, get_current_user_optional
@@ -54,6 +55,26 @@ class ContentExtractRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "content": "Looking for a Python developer to build a web scraping tool. Budget: $500. Deadline: 2024-12-31."
+            }
+        }
+
+
+class ImageExtractRequest(BaseModel):
+    """图片内容提取请求"""
+    image_base64: str = Field(..., description="Base64编码的图片数据")
+    additional_prompt: Optional[str] = Field(None, description="额外的分析提示")
+    context: Optional[Dict[str, Any]] = Field(None, description="分析上下文信息")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/...",
+                "additional_prompt": "请重点关注技术要求",
+                "context": {
+                    "task_type": "编程",
+                    "platform": "GitHub",
+                    "language": "中文"
+                }
             }
         }
 
@@ -279,6 +300,129 @@ async def extract_from_content(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"服务器内部错误: {str(e)}"
+        )
+
+
+@router.post("/extract-from-image", response_model=TaskInfoResponse, summary="从图片提取任务信息")
+async def extract_from_image(
+    request: ImageExtractRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    从图片中提取任务信息
+    
+    - **image_base64**: Base64编码的图片数据
+    - **additional_prompt**: 额外的分析提示（可选）
+    - **context**: 分析上下文信息（可选）
+    
+    **需要认证**: 否（公开端点）
+    
+    **用途**:
+    - 分析任务截图
+    - 从招聘海报中提取职位信息
+    - 分析需求文档截图
+    - 从悬赏公告图片中提取赏金任务
+    
+    **支持格式**: JPG, PNG, GIF, BMP, WebP
+    **文件限制**: 最大10MB，最大尺寸4096x4096
+    """
+    try:
+        # 创建URL代理服务实例
+        service = URLAgentService()
+        
+        # 从图片提取任务信息
+        task_info = await service.extract_task_info_from_image(
+            image_data=request.image_base64,
+            additional_prompt=request.additional_prompt,
+            context=request.context
+        )
+        
+        return task_info_to_response(task_info)
+        
+    except URLAgentError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"服务器内部错误: {str(e)}"
+        )
+
+
+@router.post("/upload-image", response_model=TaskInfoResponse, summary="上传图片并提取任务信息")
+async def upload_image_extract(
+    file: UploadFile = File(..., description="图片文件"),
+    additional_prompt: Optional[str] = Form(None, description="额外的分析提示"),
+    context_json: Optional[str] = Form(None, description="JSON格式的分析上下文"),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """
+    上传图片文件并提取任务信息
+    
+    - **file**: 图片文件（multipart/form-data）
+    - **additional_prompt**: 额外的分析提示（可选）
+    - **context_json**: JSON格式的分析上下文（可选）
+    
+    **需要认证**: 否（公开端点）
+    
+    **用途**:
+    - 直接上传图片文件进行分析
+    - 移动端应用的图片分析
+    - 批量图片处理
+    
+    **支持格式**: JPG, PNG, GIF, BMP, WebP
+    **文件限制**: 最大10MB，最大尺寸4096x4096
+    """
+    try:
+        # 验证文件类型
+        allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'}
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的文件类型: {file.content_type}"
+            )
+        
+        # 读取文件内容
+        image_bytes = await file.read()
+        
+        # 解析上下文JSON
+        context = None
+        if context_json:
+            try:
+                import json
+                context = json.loads(context_json)
+            except json.JSONDecodeError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="context_json格式无效"
+                )
+        
+        # 创建URL代理服务实例
+        service = URLAgentService()
+        
+        # 从图片提取任务信息
+        task_info = await service.extract_task_info_from_image(
+            image_data=image_bytes,
+            additional_prompt=additional_prompt,
+            context=context
+        )
+        
+        return task_info_to_response(task_info)
+        
+    except URLAgentError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except HTTPException:
+        # 重新抛出HTTP异常
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -60,8 +60,7 @@ class ContentExtractor:
             # 检查协议
             if parsed.scheme not in self.allowed_schemes:
                 raise URLValidationError(
-                    f"不支持的协议: {parsed.scheme}",
-                    f"仅支持: {', '.join(self.allowed_schemes)}"
+                    f"不支持的协议: {parsed.scheme}，仅支持: {', '.join(self.allowed_schemes)}"
                 )
             
             # 检查域名
@@ -76,7 +75,7 @@ class ContentExtractor:
                     if hostname_lower.startswith(blocked):
                         raise URLValidationError(
                             f"不允许访问内网地址: {hostname}",
-                            "出于安全考虑，禁止访问内网地址"
+                            details="出于安全考虑，禁止访问内网地址"
                         )
             
             # 返回标准化的URL
@@ -121,7 +120,7 @@ class ContentExtractor:
                     if response.status >= 400:
                         raise ContentExtractionError(
                             f"HTTP错误: {response.status}",
-                            f"服务器返回状态码: {response.status}"
+                            details=f"服务器返回状态码: {response.status}"
                         )
                     
                     # 检查内容类型
@@ -129,7 +128,7 @@ class ContentExtractor:
                     if 'text/html' not in content_type:
                         raise ContentExtractionError(
                             f"不支持的内容类型: {content_type}",
-                            "仅支持HTML内容"
+                            details="仅支持HTML内容"
                         )
                     
                     # 读取HTML内容
@@ -165,17 +164,17 @@ class ContentExtractor:
         except aiohttp.ClientError as e:
             raise ContentExtractionError(
                 f"网络请求失败: {str(e)}",
-                "请检查网络连接或URL是否可访问"
+                details="请检查网络连接或URL是否可访问"
             )
         except asyncio.TimeoutError:
             raise ContentExtractionError(
                 f"请求超时: {self.timeout}秒",
-                "网页响应时间过长"
+                details="网页响应时间过长"
             )
         except Exception as e:
             raise ContentExtractionError(
                 f"内容提取失败: {str(e)}",
-                "处理网页内容时发生未知错误"
+                details="处理网页内容时发生未知错误"
             )
     
     def clean_content(self, html_content: str) -> str:

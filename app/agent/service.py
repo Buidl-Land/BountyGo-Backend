@@ -5,19 +5,22 @@ import asyncio
 import logging
 import time
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .client import PPIOModelClient
-from .config import url_agent_settings
-from .playwright_extractor import SmartContentExtractor
-from .url_parsing_agent import URLParsingAgent
-from .task_creator import TaskCreator
-from .exceptions import URLAgentError, ConfigurationError, URLValidationError, ContentExtractionError, ModelAPIError, TaskCreationError
-from .factory import get_ppio_client, get_ppio_config
-from .models import URLProcessRequest, TaskProcessResult, TaskInfo, WebContent
+from app.agent.client import PPIOModelClient
+from app.agent.factory import get_ppio_client
+from app.agent.content_extractor import ContentExtractor
+from app.agent.playwright_extractor import PlaywrightContentExtractor
+from app.agent.url_parsing_agent import URLParsingAgent
+from app.agent.image_parsing_agent import ImageParsingAgent
+from app.agent.task_creator import TaskCreator
+from app.agent.models import TaskProcessResult, TaskInfo, WebContent
+from app.agent.exceptions import URLAgentError, ConfigurationError, URLValidationError, ContentExtractionError, ModelAPIError, TaskCreationError
+from app.agent.config import url_agent_settings
+from app.agent.factory import get_ppio_config
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +77,10 @@ class URLAgentService:
         
         # 延迟初始化组件
         self._ppio_client: Optional[PPIOModelClient] = None
-        self._content_extractor: Optional[SmartContentExtractor] = None
+        self._content_extractor: Optional[ContentExtractor] = None
+        self._playwright_extractor: Optional[PlaywrightContentExtractor] = None
         self._url_parsing_agent: Optional[URLParsingAgent] = None
+        self._image_parsing_agent: Optional[ImageParsingAgent] = None
         self._task_creator: Optional[TaskCreator] = None
         
         # 性能监控
@@ -87,32 +92,77 @@ class URLAgentService:
         
         # 错误恢复配置
         self.enable_fallback = True
+        
+        # 需要使用Playwright的网站域名
+        self.playwright_domains = {
+            'x.com', 'twitter.com', 'facebook.com', 'instagram.com',
+            'linkedin.com', 'tiktok.com', 'youtube.com', 'reddit.com',
+            'discord.com', 'telegram.org', 'whatsapp.com'
+        }
     
     @property
     def ppio_client(self) -> PPIOModelClient:
-        """获取PPIO客户端"""
+        """获取PPIO客户端（默认）"""
         if self._ppio_client is None:
             self._ppio_client = get_ppio_client()
         return self._ppio_client
     
+    def get_specialized_client(self, agent_role: str) -> PPIOModelClient:
+        """获取专门角色的PPIO客户端"""
+        return get_ppio_client(agent_role)
+    
+    def _should_use_playwright(self, url: str) -> bool:
+        """判断是否应该使用Playwright提取器"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # 移除www前缀
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            
+            return domain in self.playwright_domains
+        except Exception:
+            return False
+    
     @property
-    def content_extractor(self) -> SmartContentExtractor:
+    def content_extractor(self) -> ContentExtractor:
         """获取智能内容提取器"""
         if self._content_extractor is None:
-            self._content_extractor = SmartContentExtractor(
+            self._content_extractor = ContentExtractor(
                 timeout=self.settings.content_extraction_timeout,
-                max_content_length=self.settings.max_content_length,
-                prefer_playwright=True
+                max_content_length=self.settings.max_content_length
             )
         return self._content_extractor
+    
+    @property
+    def playwright_extractor(self) -> PlaywrightContentExtractor:
+        """获取Playwright内容提取器"""
+        if self._playwright_extractor is None:
+            self._playwright_extractor = PlaywrightContentExtractor(
+                timeout=self.settings.content_extraction_timeout,
+                max_content_length=self.settings.max_content_length
+            )
+        return self._playwright_extractor
     
     @property
     def url_parsing_agent(self) -> URLParsingAgent:
         """获取URL解析代理"""
         if self._url_parsing_agent is None:
-            ppio_config = get_ppio_config()
+            # 使用专门的URL解析模型
+            ppio_config = url_agent_settings.get_ppio_config("url_parser")
             self._url_parsing_agent = URLParsingAgent(ppio_config)
         return self._url_parsing_agent
+    
+    @property
+    def image_parsing_agent(self) -> ImageParsingAgent:
+        """获取图片解析代理"""
+        if self._image_parsing_agent is None:
+            # 使用专门的图片分析模型
+            ppio_config = url_agent_settings.get_ppio_config("image_analyzer")
+            self._image_parsing_agent = ImageParsingAgent(ppio_config)
+        return self._image_parsing_agent
     
     @property
     def task_creator(self) -> TaskCreator:
@@ -254,6 +304,9 @@ class URLAgentService:
     async def _extract_content_with_retry(self, url: str, request_id: str) -> WebContent:
         """带重试的内容提取"""
         last_exception = None
+        use_playwright = self._should_use_playwright(url)
+        
+        logger.info(f"[{request_id}] Using {'Playwright' if use_playwright else 'HTTP'} extractor for URL: {url}")
         
         for attempt in range(self.max_retries):
             try:
@@ -261,7 +314,11 @@ class URLAgentService:
                     logger.info(f"[{request_id}] Content extraction retry attempt {attempt + 1}/{self.max_retries}")
                     await asyncio.sleep(self.retry_delay * attempt)
                 
-                return await self.content_extractor.extract_content(url)
+                # 智能选择提取器
+                if use_playwright:
+                    return await self.playwright_extractor.extract_content(url)
+                else:
+                    return await self.content_extractor.extract_content(url)
                 
             except (URLValidationError, ContentExtractionError) as e:
                 last_exception = e
@@ -270,6 +327,15 @@ class URLAgentService:
                 # 对于URL验证错误，不重试
                 if isinstance(e, URLValidationError):
                     break
+                
+                # 如果普通HTTP提取器失败，尝试使用Playwright作为fallback
+                if not use_playwright and self.enable_fallback and attempt == self.max_retries - 1:
+                    logger.info(f"[{request_id}] Falling back to Playwright extractor")
+                    try:
+                        return await self.playwright_extractor.extract_content(url)
+                    except Exception as fallback_e:
+                        logger.warning(f"[{request_id}] Playwright fallback also failed: {fallback_e}")
+                        last_exception = fallback_e
                     
             except Exception as e:
                 last_exception = e
@@ -424,6 +490,58 @@ class URLAgentService:
         except Exception as e:
             logger.error(f"Unexpected error extracting task info from content: {e}")
             raise URLAgentError(f"任务信息提取失败: {str(e)}")
+
+    async def extract_task_info_from_image(
+        self, 
+        image_data: Union[bytes, str], 
+        additional_prompt: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> TaskInfo:
+        """
+        从图片中提取任务信息
+        
+        Args:
+            image_data: 图片数据（bytes或base64字符串）
+            additional_prompt: 额外的分析提示
+            context: 分析上下文
+            
+        Returns:
+            TaskInfo: 提取的任务信息
+            
+        Raises:
+            URLAgentError: 当图片解析失败时
+        """
+        try:
+            logger.info("Starting image analysis for task extraction")
+            
+            # 初始化图片解析代理
+            if not self._image_parsing_agent:
+                await self.image_parsing_agent.initialize()
+            
+            # 根据是否有上下文选择解析方法
+            if context:
+                task_info = await self.image_parsing_agent.analyze_image_with_context(
+                    image_data, context
+                )
+            else:
+                task_info = await self.image_parsing_agent.analyze_image(
+                    image_data, additional_prompt
+                )
+            
+            logger.info(f"Task info extracted from image: {task_info.title}")
+            return task_info
+            
+        except (ModelAPIError, ConfigurationError) as e:
+            logger.error(f"Image analysis failed: {e}")
+            raise URLAgentError(f"图片分析失败: {str(e)}")
+            
+        except ValueError as e:
+            logger.error(f"Invalid image data: {e}")
+            raise URLAgentError(f"图片数据无效: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"Unexpected error extracting task info from image: {e}")
+            raise URLAgentError(f"图片任务信息提取失败: {str(e)}")
     
     async def create_task_from_info(self, task_info: TaskInfo, user_id: int, source_url: Optional[str] = None) -> int:
         """
@@ -571,6 +689,10 @@ class URLAgentService:
                     "url_parsing_agent": {
                         "initialized": self._url_parsing_agent is not None,
                         "status": "ready" if self._url_parsing_agent else "not_initialized"
+                    },
+                    "image_parsing_agent": {
+                        "initialized": self._image_parsing_agent is not None,
+                        "status": "ready" if self._image_parsing_agent else "not_initialized"
                     },
                     "task_creator": {
                         "initialized": self._task_creator is not None,

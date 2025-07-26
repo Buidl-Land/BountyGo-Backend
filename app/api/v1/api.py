@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket, organizers, todos, parse
+from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket, organizers, todos, parse, multi_agent
 
 api_router = APIRouter()
 
@@ -21,6 +21,7 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["📊 Ana
 api_router.include_router(url_agent.router, prefix="/url-agent", tags=["🤖 URL Agent"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["🔔 Notifications"])
 api_router.include_router(websocket.router, prefix="/ws", tags=["🔌 WebSocket"])
+api_router.include_router(multi_agent.router, prefix="/multi-agent", tags=["🧠 Multi-Agent"])
 
 
 @api_router.get("/", summary="API信息", tags=["ℹ️ System"])
@@ -46,6 +47,13 @@ async def api_info():
             "Web3钱包集成",
             "AI驱动的URL内容提取",
             "智能任务信息解析",
+            "多智能体系统协调",
+            "基于RAG的智能推荐系统",
+            "自然语言任务查询",
+            "个性化偏好管理",
+            "智能聊天助手",
+            "图像解析和内容分析",
+            "用户行为学习和优化",
             "任务提醒和通知系统",
             "Telegram Bot集成",
             "WebSocket实时通知",
@@ -59,7 +67,8 @@ async def api_info():
             "analytics": "/api/v1/analytics",
             "url_agent": "/api/v1/url-agent",
             "notifications": "/api/v1/notifications",
-            "websocket": "/api/v1/ws"
+            "websocket": "/api/v1/ws",
+            "multi_agent": "/api/v1/multi-agent"
         },
         "authentication": {
             "required_for": [
@@ -68,7 +77,13 @@ async def api_info():
                 "个人分析数据",
                 "标签兴趣配置",
                 "URL处理和任务创建 (/api/v1/url-agent/process)",
-                "性能指标查看 (/api/v1/url-agent/metrics)"
+                "性能指标查看 (/api/v1/url-agent/metrics)",
+                "多智能体系统 (/api/v1/multi-agent/*)",
+                "个人偏好管理 (/api/v1/multi-agent/preferences/*)",
+                "智能推荐系统 (/api/v1/multi-agent/recommendations/*)",
+                "智能聊天助手 (/api/v1/multi-agent/chat)",
+                "用户档案更新 (/api/v1/multi-agent/update-user-profile)",
+                "交互历史查看 (/api/v1/multi-agent/history)"
             ],
             "public_endpoints": [
                 "任务列表和详情",
@@ -77,7 +92,11 @@ async def api_info():
                 "最近活动",
                 "URL信息提取 (/api/v1/url-agent/extract-info)",
                 "文本内容分析 (/api/v1/url-agent/extract-from-content)",
-                "服务状态查询 (/api/v1/url-agent/status)"
+                "服务状态查询 (/api/v1/url-agent/status)",
+                "多智能体系统状态 (/api/v1/multi-agent/status)",
+                "多智能体健康检查 (/api/v1/multi-agent/health)",
+                "URL内容分析 (/api/v1/multi-agent/analyze-url)",
+                "图像内容分析 (/api/v1/multi-agent/analyze-image)"
             ]
         }
     }
