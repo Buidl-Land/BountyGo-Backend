@@ -26,6 +26,7 @@ class URLParsingAgent:
         """
         self.config = ppio_config
         self.client: Optional[PPIOModelClient] = None
+        self.agent_role = "url_parser"  # 标识这是URL解析代理
         self._initialize_client()
     
     def _initialize_client(self) -> None:

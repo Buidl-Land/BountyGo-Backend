@@ -29,6 +29,7 @@ class ImageParsingAgent:
         """
         self.config = config
         self.client: Optional[PPIOModelClient] = None
+        self.agent_role = "image_analyzer"  # 标识这是图片分析代理
         
         # 支持的图片格式
         self.supported_formats = {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'}
@@ -69,14 +70,23 @@ class ImageParsingAgent:
             logger.error(f"Failed to initialize ImageParsingAgent: {e}")
             raise ConfigurationError(f"Agent initialization failed: {str(e)}")
     
-    def _get_system_prompt(self) -> str:
-        """获取图片分析的系统提示词"""
-        return """你是一个专业的图片内容分析专家，特别擅长从图片中识别和提取任务相关信息。
+    def _get_ocr_prompt(self) -> str:
+        """获取OCR文字提取的系统提示词"""
+        return """你是一个专业的OCR文字识别专家。请仔细分析图片中的所有文字内容，并按照以下要求提取：
 
-重要要求：你必须只返回有效的JSON格式数据，不要包含任何其他文字说明或解释！
+1. 识别图片中的所有可见文字
+2. 保持文字的原始格式和结构
+3. 如果有表格或列表，请保持其结构
+4. 如果文字模糊或不清楚，请标注[不清楚]
+5. 按照从上到下、从左到右的顺序提取文字
 
-请仔细分析图片内容，提取其中的任务信息，并严格按照以下JSON格式返回：
+请只返回提取的文字内容，不要添加任何解释或分析。"""
 
+    def _get_task_analysis_prompt(self) -> str:
+        """获取任务信息分析的系统提示词"""
+        return """你是一个专业的任务信息分析专家。请根据提供的文字内容，提取其中的任务相关信息。
+
+请按照以下JSON格式返回提取的信息：
 {
     "title": "任务标题",
     "description": "任务描述",
@@ -89,22 +99,13 @@ class ImageParsingAgent:
 }
 
 分析指南：
-1. 识别图片中的文字内容（OCR功能）
-2. 理解图片中展示的任务需求
-3. 提取奖励信息（支持传统货币和Web3代币）
-4. 识别时间相关信息作为截止日期
-5. 根据内容推断相关技能标签
-6. 评估任务难度和预估工时
+1. 从文字中识别任务标题和描述
+2. 提取奖励金额和货币类型
+3. 识别时间相关信息作为截止日期
+4. 根据内容推断相关技能标签
+5. 评估任务难度和预估工时
 
-常见场景：
-- 任务截图：从应用或网站截图中提取任务信息
-- 招聘海报：从招聘图片中提取职位信息
-- 需求文档：从文档截图中提取项目需求
-
-再次强调：请只返回纯JSON数据，不要有任何其他文字！
-- 悬赏公告：从悬赏图片中提取赏金任务
-
-如果图片中没有明确的任务信息，请根据图片内容合理推测可能的任务类型。
+如果某些信息无法从文字中提取，请设置为null。
 请确保返回的JSON格式正确，不要包含任何额外的文本。"""
 
     async def analyze_image(
@@ -113,7 +114,7 @@ class ImageParsingAgent:
         additional_prompt: Optional[str] = None
     ) -> TaskInfo:
         """
-        分析图片内容并提取任务信息
+        分析图片内容并提取任务信息（两步处理：OCR + 任务分析）
         
         Args:
             image_data: 图片数据（bytes）或base64字符串
@@ -130,41 +131,18 @@ class ImageParsingAgent:
             raise ConfigurationError("Client not initialized")
         
         try:
-            # 验证和处理图片
-            processed_image = await self._process_image(image_data)
+            # 步骤1: 使用视觉模型进行OCR文字提取
+            logger.info("Step 1: Extracting text from image using vision model")
+            extracted_text = await self._extract_text_from_image(image_data, additional_prompt)
             
-            # 构建消息
-            messages = [
-                {
-                    "role": "system", 
-                    "content": self._get_system_prompt()
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{processed_image}"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": additional_prompt or "请分析这张图片中的任务信息"
-                        }
-                    ]
-                }
-            ]
+            if not extracted_text or len(extracted_text.strip()) < 10:
+                raise ModelAPIError("No meaningful text extracted from image")
             
-            # 获取AI响应
-            logger.info("Analyzing image with vision language model")
-            response = await self.client.chat_completion(messages)
+            logger.info(f"Extracted text: {extracted_text[:200]}...")
             
-            if not response:
-                raise ModelAPIError("No response from vision model")
-            
-            # 解析响应内容
-            task_info = self._parse_response(response)
+            # 步骤2: 使用文本处理模型分析任务信息
+            logger.info("Step 2: Analyzing extracted text for task information")
+            task_info = await self._analyze_text_for_task_info(extracted_text)
             
             logger.info(f"Successfully extracted task info from image: {task_info.title}")
             return task_info
@@ -172,6 +150,89 @@ class ImageParsingAgent:
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             raise ModelAPIError(f"Failed to analyze image: {str(e)}")
+    
+    async def _extract_text_from_image(self, image_data: Union[bytes, str], additional_prompt: Optional[str] = None) -> str:
+        """
+        第一步：从图片中提取文字内容
+        """
+        try:
+            # 验证和处理图片
+            processed_image = await self._process_image(image_data)
+            
+            # 构建OCR消息（简化格式，只做文字提取）
+            prompt = self._get_ocr_prompt()
+            if additional_prompt:
+                prompt += f"\n\n额外要求：{additional_prompt}"
+            
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{processed_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+            
+            # 获取OCR响应
+            response = await self.client.chat_completion(messages)
+            
+            if not response:
+                raise ModelAPIError("No response from vision model for OCR")
+            
+            return response.strip()
+            
+        except Exception as e:
+            logger.error(f"Text extraction from image failed: {e}")
+            raise ModelAPIError(f"Failed to extract text from image: {str(e)}")
+    
+    async def _analyze_text_for_task_info(self, extracted_text: str) -> TaskInfo:
+        """
+        第二步：分析提取的文字内容，获取任务信息
+        """
+        try:
+            # 使用文本处理专用模型（URL_PARSER_MODEL）进行任务信息分析
+            from app.agent.config import url_agent_settings
+            from app.agent.client import PPIOModelClient
+            
+            # 获取文本处理专用配置
+            text_config = url_agent_settings.get_ppio_config("url_parser")
+            text_client = PPIOModelClient(text_config)
+            
+            # 构建任务分析消息
+            messages = [
+                {
+                    "role": "system",
+                    "content": self._get_task_analysis_prompt()
+                },
+                {
+                    "role": "user", 
+                    "content": f"请从以下文字内容中提取任务信息：\n\n{extracted_text}"
+                }
+            ]
+            
+            # 获取任务分析响应
+            response = await text_client.chat_completion(messages)
+            
+            if not response:
+                raise ModelAPIError("No response from text analysis model")
+            
+            # 解析响应内容
+            task_info = self._parse_response(response)
+            
+            return task_info
+            
+        except Exception as e:
+            logger.error(f"Text analysis for task info failed: {e}")
+            raise ModelAPIError(f"Failed to analyze text for task info: {str(e)}")
     
     async def _process_image(self, image_data: Union[bytes, str]) -> str:
         """

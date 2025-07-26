@@ -2,6 +2,7 @@
 Configuration for PPIO model and URL agent settings.
 Legacy configuration - use unified_config.py for new implementations.
 """
+import os
 import asyncio
 import aiohttp
 from typing import Optional
@@ -185,17 +186,46 @@ class URLAgentSettings(BaseSettings):
         case_sensitive = False
         extra = "ignore"  # 忽略额外的环境变量
 
-    def get_ppio_config(self) -> PPIOModelConfig:
-        """获取PPIO模型配置"""
+    def get_ppio_config(self, agent_role: Optional[str] = None) -> PPIOModelConfig:
+        """获取PPIO模型配置，支持按角色选择最佳模型"""
         if not self.ppio_api_key:
             raise ValueError("PPIO_API_KEY is required for URL agent functionality")
+        
+        # 根据agent角色选择最佳模型
+        model_name = self.ppio_model_name
+        temperature = self.ppio_temperature
+        max_tokens = self.ppio_max_tokens
+        
+        if agent_role:
+            role_model_mapping = {
+                "image_analyzer": os.getenv("IMAGE_ANALYZER_MODEL", "baidu/ernie-4.5-vl-28b-a3b"),
+                "url_parser": os.getenv("URL_PARSER_MODEL", "qwen/qwen3-coder-480b-a35b-instruct"),
+                "content_extractor": os.getenv("CONTENT_EXTRACTOR_MODEL", "moonshotai/kimi-k2-instruct"),
+                "task_creator": os.getenv("TASK_CREATOR_MODEL", "deepseek/deepseek-r1-0528"),
+                "quality_checker": os.getenv("QUALITY_CHECKER_MODEL", "qwen/qwen3-235b-a22b-thinking-2507"),
+                "coordinator": os.getenv("COORDINATOR_MODEL", "moonshotai/kimi-k2-instruct")
+            }
+            
+            role_temperature_mapping = {
+                "image_analyzer": float(os.getenv("IMAGE_ANALYZER_TEMPERATURE", "0.1")),
+                "url_parser": float(os.getenv("URL_PARSER_TEMPERATURE", "0.1")),
+                "content_extractor": float(os.getenv("CONTENT_EXTRACTOR_TEMPERATURE", "0.1")),
+                "task_creator": float(os.getenv("TASK_CREATOR_TEMPERATURE", "0.0")),
+                "quality_checker": float(os.getenv("QUALITY_CHECKER_TEMPERATURE", "0.0")),
+                "coordinator": float(os.getenv("COORDINATOR_TEMPERATURE", "0.2"))
+            }
+            
+            if agent_role in role_model_mapping:
+                model_name = role_model_mapping[agent_role]
+                temperature = role_temperature_mapping[agent_role]
+                max_tokens = 8000  # 为专用模型提供更多token
         
         return PPIOModelConfig(
             api_key=self.ppio_api_key,
             base_url=self.ppio_base_url,
-            model_name=self.ppio_model_name,
-            max_tokens=self.ppio_max_tokens,
-            temperature=self.ppio_temperature
+            model_name=model_name,
+            max_tokens=max_tokens,
+            temperature=temperature
         )
 
 

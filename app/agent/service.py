@@ -93,10 +93,14 @@ class URLAgentService:
     
     @property
     def ppio_client(self) -> PPIOModelClient:
-        """获取PPIO客户端"""
+        """获取PPIO客户端（默认）"""
         if self._ppio_client is None:
             self._ppio_client = get_ppio_client()
         return self._ppio_client
+    
+    def get_specialized_client(self, agent_role: str) -> PPIOModelClient:
+        """获取专门角色的PPIO客户端"""
+        return get_ppio_client(agent_role)
     
     @property
     def content_extractor(self) -> ContentExtractor:
@@ -112,7 +116,8 @@ class URLAgentService:
     def url_parsing_agent(self) -> URLParsingAgent:
         """获取URL解析代理"""
         if self._url_parsing_agent is None:
-            ppio_config = get_ppio_config()
+            # 使用专门的URL解析模型
+            ppio_config = url_agent_settings.get_ppio_config("url_parser")
             self._url_parsing_agent = URLParsingAgent(ppio_config)
         return self._url_parsing_agent
     
@@ -120,7 +125,8 @@ class URLAgentService:
     def image_parsing_agent(self) -> ImageParsingAgent:
         """获取图片解析代理"""
         if self._image_parsing_agent is None:
-            ppio_config = get_ppio_config()
+            # 使用专门的图片分析模型
+            ppio_config = url_agent_settings.get_ppio_config("image_analyzer")
             self._image_parsing_agent = ImageParsingAgent(ppio_config)
         return self._image_parsing_agent
     
