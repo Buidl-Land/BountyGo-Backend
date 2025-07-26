@@ -23,16 +23,21 @@ class WebContent(BaseModel):
     extracted_at: datetime = Field(default_factory=datetime.utcnow, description="提取时间")
 
 
+class OrganizerInfo(BaseModel):
+    """AI提取的主办方信息模型"""
+    name: str = Field(..., description="主办方名称")
+
+
 class TaskInfo(BaseModel):
     """AI提取的任务信息模型"""
     title: str = Field(..., description="任务标题")
+    summary: Optional[str] = Field(None, description="任务简介")
     description: Optional[str] = Field(None, description="任务描述")
-    reward: Optional[Decimal] = Field(None, description="奖励金额")
-    reward_currency: Optional[str] = Field(default="USD", description="奖励货币")
-    deadline: Optional[datetime] = Field(None, description="截止日期")
-    tags: List[str] = Field(default=[], description="相关标签")
-    difficulty_level: Optional[str] = Field(None, description="难度等级")
-    estimated_hours: Optional[int] = Field(None, description="预估工时")
+    deadline: Optional[int] = Field(None, description="截止日期时间戳")
+    category: Optional[str] = Field(None, description="任务分类：黑客松、征文、Meme创作、Web3交互、推特抽奖、开发实战")
+    reward_details: Optional[str] = Field(None, description="奖励详情")
+    reward_type: Optional[str] = Field(None, description="奖励分类：每人、瓜分、抽奖、积分、权益")
+    organizer_name: Optional[str] = Field(None, description="主办方名称")
 
 
 class TaskProcessResult(BaseModel):

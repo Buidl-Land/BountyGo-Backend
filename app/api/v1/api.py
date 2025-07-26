@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket, multi_agent
+from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket, organizers, todos, parse, multi_agent
 
 api_router = APIRouter()
 
@@ -13,6 +13,9 @@ api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["🔐 Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["👤 Users"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["📋 Tasks"])
+api_router.include_router(organizers.router, prefix="/organizers", tags=["🏢 Organizers"])
+api_router.include_router(todos.router, prefix="/todos", tags=["✅ Todos"])
+api_router.include_router(parse.router, prefix="/parse", tags=["🔍 Parse"])
 api_router.include_router(tags.router, prefix="/tags", tags=["🏷️ Tags"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["📊 Analytics"])
 api_router.include_router(url_agent.router, prefix="/url-agent", tags=["🤖 URL Agent"])

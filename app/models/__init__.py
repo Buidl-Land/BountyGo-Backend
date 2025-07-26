@@ -4,7 +4,7 @@ Database models package
 from .base import Base, BaseModel, TimestampMixin
 from .user import User, UserWallet, RefreshToken
 from .tag import Tag, UserTagProfile
-from .task import Task, TaskTag, Todo, Message, TaskView
+from .task import Task, TaskTag, Todo, Message, TaskView, Organizer
 from .notification import Notification, NotificationTemplate, UserNotificationPreference
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "Todo",
     "Message",
     "TaskView",
+    "Organizer",
     "Notification",
     "NotificationTemplate",
     "UserNotificationPreference"

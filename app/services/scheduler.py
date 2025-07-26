@@ -133,12 +133,12 @@ class TaskReminderSchedulerService:
         async with AsyncSessionLocal() as db:
             try:
                 # 查找未来7天内到期的任务
-                future_date = datetime.utcnow() + timedelta(days=7)
+                future_timestamp = int(datetime.utcnow().timestamp()) + (7 * 24 * 3600)  # 7 days in seconds
 
                 result = await db.execute(
                     select(Task).where(
                         Task.deadline.isnot(None),
-                        Task.deadline <= future_date,
+                        Task.deadline <= future_timestamp,
                         Task.status == "active"
                     )
                 )

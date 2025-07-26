@@ -182,7 +182,7 @@ class WebSocketNotificationSender:
         user_id: int,
         task_id: int,
         task_title: str,
-        deadline: datetime,
+        deadline: int,
         reminder_type: str,
         message: str
     ):
