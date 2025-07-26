@@ -102,6 +102,9 @@ app = FastAPI(
     - 💬 **讨论系统**: 任务讨论和实时消息
     - 📊 **数据分析**: 用户行为分析和任务统计
     - 🤖 **AI代理**: 智能URL内容提取和任务信息解析
+    - 🧠 **多智能体系统**: 智能协调、推荐引擎、图像解析
+    - 🔔 **通知系统**: 实时通知、Telegram Bot集成
+    - 🔌 **WebSocket**: 实时通信和状态同步
 
     ### 技术特性
     - ⚡ **异步架构**: 基于FastAPI的高性能异步API
@@ -115,6 +118,9 @@ app = FastAPI(
     2. 使用 `/api/v1/users/me` 管理个人资料
     3. 通过 `/api/v1/tasks` 浏览和创建任务
     4. 使用 `/api/v1/tags` 管理标签和兴趣配置
+    5. 通过 `/api/v1/multi-agent` 访问智能推荐和多智能体服务
+    6. 使用 `/api/v1/notifications` 管理通知和提醒
+    7. 通过 `/api/v1/ws` 建立WebSocket实时连接
     """,
     version="1.0.0",
     lifespan=lifespan,

@@ -44,6 +44,9 @@ async def api_info():
             "Web3钱包集成",
             "AI驱动的URL内容提取",
             "智能任务信息解析",
+            "多智能体系统协调",
+            "智能推荐和偏好管理",
+            "图像解析和内容分析",
             "任务提醒和通知系统",
             "Telegram Bot集成",
             "WebSocket实时通知",
@@ -67,7 +70,10 @@ async def api_info():
                 "个人分析数据",
                 "标签兴趣配置",
                 "URL处理和任务创建 (/api/v1/url-agent/process)",
-                "性能指标查看 (/api/v1/url-agent/metrics)"
+                "性能指标查看 (/api/v1/url-agent/metrics)",
+                "多智能体系统 (/api/v1/multi-agent/*)",
+                "个人偏好管理 (/api/v1/multi-agent/preferences/*)",
+                "推荐系统 (/api/v1/multi-agent/recommendations/*)"
             ],
             "public_endpoints": [
                 "任务列表和详情",
@@ -76,7 +82,9 @@ async def api_info():
                 "最近活动",
                 "URL信息提取 (/api/v1/url-agent/extract-info)",
                 "文本内容分析 (/api/v1/url-agent/extract-from-content)",
-                "服务状态查询 (/api/v1/url-agent/status)"
+                "服务状态查询 (/api/v1/url-agent/status)",
+                "多智能体系统状态 (/api/v1/multi-agent/status)",
+                "图像解析服务 (/api/v1/multi-agent/image-parsing/parse)"
             ]
         }
     }
