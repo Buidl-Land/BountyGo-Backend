@@ -16,6 +16,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a user"""
     google_id: Optional[str] = None
+    clerk_id: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -96,6 +97,7 @@ class UserProfile(User):
 class UserInDB(User):
     """User schema for database operations"""
     google_id: Optional[str] = None
+    clerk_id: Optional[str] = None
 
 
 # Authentication schemas
@@ -117,6 +119,17 @@ class WalletAuthRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
     signature: str
     message: str
+
+
+class ClerkAuthRequest(BaseModel):
+    """Clerk authentication request"""
+    clerk_token: str = Field(..., min_length=1, description="Clerk JWT token")
+
+
+class ClerkLinkRequest(BaseModel):
+    """Request to link Clerk account to existing user"""
+    clerk_token: str = Field(..., min_length=1, description="Clerk JWT token")
+    user_id: Optional[int] = None  # If not provided, use current authenticated user
 
 
 class GoogleUserInfo(BaseModel):

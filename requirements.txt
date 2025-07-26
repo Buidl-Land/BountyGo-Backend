@@ -14,6 +14,7 @@ redis[hiredis]>=5.0.1
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.6
+fastapi-clerk-auth>=0.0.7
 
 # Google OAuth
 google-auth>=2.23.4
