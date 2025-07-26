@@ -14,6 +14,7 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     google_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    clerk_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     nickname: Mapped[str] = mapped_column(String(100), nullable=False)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

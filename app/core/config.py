@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
 
+    # Clerk Authentication
+    CLERK_PUBLISHABLE_KEY: Optional[str] = None
+    CLERK_SECRET_KEY: Optional[str] = None
+    CLERK_JWKS_URL: Optional[str] = None
+    CLERK_FRONTEND_API: Optional[str] = None
+
     # External Services
     AI_SERVICE_URL: Optional[str] = None
     AI_SERVICE_API_KEY: Optional[str] = None
@@ -278,6 +284,62 @@ class Settings(BaseSettings):
 
         return validation_results
 
+    def validate_clerk_config(self) -> dict:
+        """Validate Clerk configuration and return validation results"""
+        validation_results = {
+            "valid": True,
+            "errors": [],
+            "warnings": []
+        }
+
+        # Check if Clerk is configured
+        if not self.CLERK_SECRET_KEY and not self.CLERK_JWKS_URL:
+            validation_results["warnings"].append("Clerk authentication not configured")
+            return validation_results
+
+        # Validate secret key
+        if self.CLERK_SECRET_KEY:
+            if not self.CLERK_SECRET_KEY.startswith('sk_'):
+                validation_results["valid"] = False
+                validation_results["errors"].append("CLERK_SECRET_KEY must start with 'sk_'")
+            elif len(self.CLERK_SECRET_KEY) < 20:
+                validation_results["valid"] = False
+                validation_results["errors"].append("CLERK_SECRET_KEY appears to be too short")
+
+        # Validate publishable key
+        if self.CLERK_PUBLISHABLE_KEY:
+            if not self.CLERK_PUBLISHABLE_KEY.startswith('pk_'):
+                validation_results["valid"] = False
+                validation_results["errors"].append("CLERK_PUBLISHABLE_KEY must start with 'pk_'")
+
+        # Validate JWKS URL
+        if self.CLERK_JWKS_URL:
+            if not self.CLERK_JWKS_URL.startswith(('http://', 'https://')):
+                validation_results["valid"] = False
+                validation_results["errors"].append("CLERK_JWKS_URL must be a valid HTTP/HTTPS URL")
+            elif not self.CLERK_JWKS_URL.endswith('/.well-known/jwks.json'):
+                validation_results["warnings"].append("CLERK_JWKS_URL should end with '/.well-known/jwks.json'")
+
+        # Validate frontend API
+        if self.CLERK_FRONTEND_API:
+            if not self.CLERK_FRONTEND_API.startswith(('http://', 'https://')):
+                validation_results["valid"] = False
+                validation_results["errors"].append("CLERK_FRONTEND_API must be a valid HTTP/HTTPS URL")
+
+        return validation_results
+
+    def is_clerk_enabled(self) -> bool:
+        """Check if Clerk authentication is enabled"""
+        return bool(self.CLERK_SECRET_KEY or self.CLERK_JWKS_URL)
+
+    def get_clerk_jwks_url(self) -> Optional[str]:
+        """Get Clerk JWKS URL, auto-generate if frontend API is provided"""
+        if self.CLERK_JWKS_URL:
+            return self.CLERK_JWKS_URL
+        elif self.CLERK_FRONTEND_API:
+            return f"{self.CLERK_FRONTEND_API.rstrip('/')}/.well-known/jwks.json"
+        return None
+
     def get_config_summary(self) -> dict:
         """Get a summary of current configuration for debugging"""
         return {
@@ -296,7 +358,9 @@ class Settings(BaseSettings):
             "user_agent": self.USER_AGENT,
             "max_redirects": self.MAX_REDIRECTS,
             "verify_ssl": self.VERIFY_SSL,
-            "dev_test_enabled": self.is_dev_test_token_enabled()
+            "dev_test_enabled": self.is_dev_test_token_enabled(),
+            "clerk_enabled": self.is_clerk_enabled(),
+            "clerk_jwks_url": self.get_clerk_jwks_url()
         }
 
     class Config:
