@@ -246,6 +246,154 @@ async def create_task(
     return task
 
 
+# ==================== My Todos Routes ====================
+# 这些路由必须在 /{task_id} 路由之前定义，避免路由冲突
+
+@router.get("/my-todos", response_model=List[TodoSchema], summary="获取我的任务列表")
+async def get_my_todos(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    is_active: Optional[bool] = Query(None, description="筛选活跃状态"),
+    task_status: Optional[str] = Query(None, description="筛选任务状态")
+):
+    """
+    获取当前用户的任务待办列表
+
+    - **is_active**: 筛选待办事项的活跃状态
+    - **task_status**: 筛选任务状态 (active, completed, cancelled, paused)
+    """
+    # 构建基础查询
+    query = select(Todo).where(Todo.user_id == current_user.id)
+
+    # 筛选条件
+    if is_active is not None:
+        query = query.where(Todo.is_active == is_active)
+
+    if task_status:
+        query = query.join(Task).where(Task.status == task_status)
+
+    # 按添加时间倒序排列
+    query = query.order_by(Todo.added_at.desc())
+
+    # 执行查询
+    result = await db.execute(query)
+    todos = result.scalars().all()
+
+    # 如果有todos，重新查询以确保正确预加载关联数据
+    if todos:
+        todo_ids = [todo.id for todo in todos]
+        # 重新查询并预加载所有关联数据
+        preload_query = select(Todo).options(
+            selectinload(Todo.task).selectinload(Task.sponsor),
+            selectinload(Todo.task).selectinload(Task.organizer),
+            selectinload(Todo.task).selectinload(Task.task_tags).selectinload(TaskTag.tag)
+        ).where(Todo.id.in_(todo_ids)).order_by(Todo.added_at.desc())
+
+        preload_result = await db.execute(preload_query)
+        todos = preload_result.scalars().all()
+
+    return todos
+
+
+@router.put("/my-todos/{todo_id}", response_model=TodoSchema, summary="更新我的任务设置")
+async def update_my_todo(
+    todo_id: int,
+    todo_update: TodoUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新个人待办事项的设置
+
+    - **todo_id**: 待办事项ID
+    - **remind_flags**: 提醒设置
+    - **is_active**: 是否活跃
+    """
+    # 查询待办事项
+    result = await db.execute(
+        select(Todo)
+        .where(Todo.id == todo_id)
+        .where(Todo.user_id == current_user.id)
+    )
+    todo = result.scalar_one_or_none()
+
+    if not todo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="待办事项不存在或无权限访问"
+        )
+
+    # 更新待办事项
+    update_data = todo_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if field == "remind_flags" and value is not None:
+            # 将字典转换为JSON字符串
+            setattr(todo, field, json.dumps(value))
+        else:
+            setattr(todo, field, value)
+
+    await db.commit()
+    await db.refresh(todo)
+
+    # 重新查询以预加载task关系，避免序列化时的异步会话问题
+    result = await db.execute(
+        select(Todo)
+        .options(
+            selectinload(Todo.task).selectinload(Task.sponsor),
+            selectinload(Todo.task).selectinload(Task.organizer),
+            selectinload(Todo.task).selectinload(Task.task_tags).selectinload(TaskTag.tag)
+        )
+        .where(Todo.id == todo.id)
+    )
+    todo_with_task = result.scalar_one()
+
+    # TODO: 重新调度提醒
+    # 这里可以调用提醒调度服务重新安排提醒
+
+    return todo_with_task
+
+
+@router.delete("/my-todos/{todo_id}", response_model=SuccessResponse, summary="移除我的任务")
+async def remove_my_todo(
+    todo_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    从个人待办列表中移除任务
+
+    - **todo_id**: 待办事项ID
+    """
+    # 查询待办事项
+    result = await db.execute(
+        select(Todo)
+        .where(Todo.id == todo_id)
+        .where(Todo.user_id == current_user.id)
+    )
+    todo = result.scalar_one_or_none()
+
+    if not todo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="待办事项不存在或无权限访问"
+        )
+
+    # 删除待办事项
+    await db.delete(todo)
+
+    # 更新任务的加入计数
+    task_result = await db.execute(select(Task).where(Task.id == todo.task_id))
+    task = task_result.scalar_one_or_none()
+    if task and task.join_count > 0:
+        task.join_count -= 1
+
+    await db.commit()
+
+    return SuccessResponse(message="已从待办列表中移除任务")
+
+
+# ==================== Task Detail Routes ====================
+
 @router.get("/{task_id}", response_model=TaskSchema, summary="获取任务详情")
 async def get_task(
     task_id: int,
@@ -453,6 +601,18 @@ async def join_task(
     await db.commit()
     await db.refresh(new_todo)
 
+    # 预加载task关系以避免序列化时的异步会话问题
+    result = await db.execute(
+        select(Todo)
+        .options(
+            selectinload(Todo.task).selectinload(Task.sponsor),
+            selectinload(Todo.task).selectinload(Task.organizer),
+            selectinload(Todo.task).selectinload(Task.task_tags).selectinload(TaskTag.tag)
+        )
+        .where(Todo.id == new_todo.id)
+    )
+    new_todo_with_task = result.scalar_one()
+
     # 调度任务提醒 - 暂时禁用以避免数据库问题
     # try:
     #     from app.services.notification import task_reminder_scheduler
@@ -461,7 +621,7 @@ async def join_task(
     #     # 提醒调度失败不应该影响加入任务的操作
     #     logger.warning(f"Failed to schedule reminders for task {task_id}: {e}")
 
-    return new_todo
+    return new_todo_with_task
 
 
 @router.get("/{task_id}/messages", response_model=MessageList, summary="获取任务讨论")
@@ -598,122 +758,9 @@ async def complete_task(
     return SuccessResponse(message="任务已标记为完成")
 
 
-@router.get("/my-todos", response_model=List[TodoSchema], summary="获取我的任务列表")
-async def get_my_todos(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    is_active: Optional[bool] = Query(None, description="筛选活跃状态"),
-    task_status: Optional[str] = Query(None, description="筛选任务状态")
-):
-    """
-    获取当前用户的任务待办列表
-
-    - **is_active**: 筛选待办事项的活跃状态
-    - **task_status**: 筛选任务状态 (active, completed, cancelled, paused)
-    """
-    # 构建查询
-    query = select(Todo).options(
-        selectinload(Todo.task).selectinload(Task.sponsor),
-        selectinload(Todo.task).selectinload(Task.task_tags).selectinload(TaskTag.tag)
-    ).where(Todo.user_id == current_user.id)
-
-    # 筛选条件
-    if is_active is not None:
-        query = query.where(Todo.is_active == is_active)
-
-    if task_status:
-        query = query.join(Task).where(Task.status == task_status)
-
-    # 按添加时间倒序排列
-    query = query.order_by(Todo.added_at.desc())
-
-    # 执行查询
-    result = await db.execute(query)
-    todos = result.scalars().all()
-
-    return todos
 
 
-@router.delete("/my-todos/{todo_id}", response_model=SuccessResponse, summary="移除我的任务")
-async def remove_my_todo(
-    todo_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    从个人待办列表中移除任务
-
-    - **todo_id**: 待办事项ID
-    """
-    # 查询待办事项
-    result = await db.execute(
-        select(Todo)
-        .where(Todo.id == todo_id)
-        .where(Todo.user_id == current_user.id)
-    )
-    todo = result.scalar_one_or_none()
-
-    if not todo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="待办事项不存在或无权限访问"
-        )
-
-    # 删除待办事项
-    await db.delete(todo)
-
-    # 更新任务的加入计数
-    task_result = await db.execute(select(Task).where(Task.id == todo.task_id))
-    task = task_result.scalar_one_or_none()
-    if task and task.join_count > 0:
-        task.join_count -= 1
-
-    await db.commit()
-
-    return SuccessResponse(message="已从待办列表中移除任务")
 
 
-@router.put("/my-todos/{todo_id}", response_model=TodoSchema, summary="更新我的任务设置")
-async def update_my_todo(
-    todo_id: int,
-    todo_update: TodoUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    更新个人待办事项的设置
 
-    - **todo_id**: 待办事项ID
-    - **remind_flags**: 提醒设置
-    - **is_active**: 是否活跃
-    """
-    # 查询待办事项
-    result = await db.execute(
-        select(Todo)
-        .where(Todo.id == todo_id)
-        .where(Todo.user_id == current_user.id)
-    )
-    todo = result.scalar_one_or_none()
 
-    if not todo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="待办事项不存在或无权限访问"
-        )
-
-    # 更新待办事项
-    update_data = todo_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        if field == "remind_flags" and value is not None:
-            # 将字典转换为JSON字符串
-            setattr(todo, field, json.dumps(value))
-        else:
-            setattr(todo, field, value)
-
-    await db.commit()
-    await db.refresh(todo)
-
-    # TODO: 重新调度提醒
-    # 这里可以调用提醒调度服务重新安排提醒
-
-    return todo
