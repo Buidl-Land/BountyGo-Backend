@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .client import PPIOModelClient
 from .config import url_agent_settings, PPIOModelConfig
+from .unified_config import get_config_manager, AgentRole
 from .url_parsing_agent import URLParsingAgent
 from .exceptions import ConfigurationError
 
@@ -26,7 +27,24 @@ class URLAgentServiceFactory:
         """获取PPIO模型客户端单例"""
         if cls._ppio_client is None:
             try:
-                config = url_agent_settings.get_ppio_config()
+                # 优先使用统一配置
+                config_manager = get_config_manager()
+                url_agent_config = config_manager.get_agent_config(AgentRole.URL_PARSER)
+                
+                if url_agent_config:
+                    config = PPIOModelConfig(
+                        api_key=url_agent_config.api_key,
+                        base_url=url_agent_config.base_url or "https://api.ppinfra.com/v3/openai",
+                        model_name=url_agent_config.model_name,
+                        max_tokens=url_agent_config.max_tokens,
+                        temperature=url_agent_config.temperature,
+                        timeout=url_agent_config.timeout,
+                        max_retries=url_agent_config.max_retries
+                    )
+                else:
+                    # 回退到传统配置
+                    config = url_agent_settings.get_ppio_config()
+                
                 cls._ppio_client = PPIOModelClient(config)
                 logger.info(f"PPIO client initialized with model: {config.model_name}")
             except ValueError as e:

@@ -60,8 +60,7 @@ class ContentExtractor:
             # 检查协议
             if parsed.scheme not in self.allowed_schemes:
                 raise URLValidationError(
-                    f"不支持的协议: {parsed.scheme}",
-                    f"仅支持: {', '.join(self.allowed_schemes)}"
+                    f"不支持的协议: {parsed.scheme}，仅支持: {', '.join(self.allowed_schemes)}"
                 )
             
             # 检查域名

@@ -5,19 +5,21 @@ import asyncio
 import logging
 import time
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .client import PPIOModelClient
-from .config import url_agent_settings
-from .playwright_extractor import SmartContentExtractor
-from .url_parsing_agent import URLParsingAgent
-from .task_creator import TaskCreator
-from .exceptions import URLAgentError, ConfigurationError, URLValidationError, ContentExtractionError, ModelAPIError, TaskCreationError
-from .factory import get_ppio_client, get_ppio_config
-from .models import URLProcessRequest, TaskProcessResult, TaskInfo, WebContent
+from app.agent.client import PPIOModelClient
+from app.agent.factory import get_ppio_client
+from app.agent.content_extractor import ContentExtractor
+from app.agent.url_parsing_agent import URLParsingAgent
+from app.agent.image_parsing_agent import ImageParsingAgent
+from app.agent.task_creator import TaskCreator
+from app.agent.models import TaskProcessResult, TaskInfo, WebContent
+from app.agent.exceptions import URLAgentError, ConfigurationError, URLValidationError, ContentExtractionError, ModelAPIError, TaskCreationError
+from app.agent.config import url_agent_settings
+from app.agent.factory import get_ppio_config
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +76,9 @@ class URLAgentService:
         
         # 延迟初始化组件
         self._ppio_client: Optional[PPIOModelClient] = None
-        self._content_extractor: Optional[SmartContentExtractor] = None
+        self._content_extractor: Optional[ContentExtractor] = None
         self._url_parsing_agent: Optional[URLParsingAgent] = None
+        self._image_parsing_agent: Optional[ImageParsingAgent] = None
         self._task_creator: Optional[TaskCreator] = None
         
         # 性能监控
@@ -96,13 +99,12 @@ class URLAgentService:
         return self._ppio_client
     
     @property
-    def content_extractor(self) -> SmartContentExtractor:
+    def content_extractor(self) -> ContentExtractor:
         """获取智能内容提取器"""
         if self._content_extractor is None:
-            self._content_extractor = SmartContentExtractor(
+            self._content_extractor = ContentExtractor(
                 timeout=self.settings.content_extraction_timeout,
-                max_content_length=self.settings.max_content_length,
-                prefer_playwright=True
+                max_content_length=self.settings.max_content_length
             )
         return self._content_extractor
     
@@ -113,6 +115,14 @@ class URLAgentService:
             ppio_config = get_ppio_config()
             self._url_parsing_agent = URLParsingAgent(ppio_config)
         return self._url_parsing_agent
+    
+    @property
+    def image_parsing_agent(self) -> ImageParsingAgent:
+        """获取图片解析代理"""
+        if self._image_parsing_agent is None:
+            ppio_config = get_ppio_config()
+            self._image_parsing_agent = ImageParsingAgent(ppio_config)
+        return self._image_parsing_agent
     
     @property
     def task_creator(self) -> TaskCreator:
@@ -424,6 +434,58 @@ class URLAgentService:
         except Exception as e:
             logger.error(f"Unexpected error extracting task info from content: {e}")
             raise URLAgentError(f"任务信息提取失败: {str(e)}")
+
+    async def extract_task_info_from_image(
+        self, 
+        image_data: Union[bytes, str], 
+        additional_prompt: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> TaskInfo:
+        """
+        从图片中提取任务信息
+        
+        Args:
+            image_data: 图片数据（bytes或base64字符串）
+            additional_prompt: 额外的分析提示
+            context: 分析上下文
+            
+        Returns:
+            TaskInfo: 提取的任务信息
+            
+        Raises:
+            URLAgentError: 当图片解析失败时
+        """
+        try:
+            logger.info("Starting image analysis for task extraction")
+            
+            # 初始化图片解析代理
+            if not self._image_parsing_agent:
+                await self.image_parsing_agent.initialize()
+            
+            # 根据是否有上下文选择解析方法
+            if context:
+                task_info = await self.image_parsing_agent.analyze_image_with_context(
+                    image_data, context
+                )
+            else:
+                task_info = await self.image_parsing_agent.analyze_image(
+                    image_data, additional_prompt
+                )
+            
+            logger.info(f"Task info extracted from image: {task_info.title}")
+            return task_info
+            
+        except (ModelAPIError, ConfigurationError) as e:
+            logger.error(f"Image analysis failed: {e}")
+            raise URLAgentError(f"图片分析失败: {str(e)}")
+            
+        except ValueError as e:
+            logger.error(f"Invalid image data: {e}")
+            raise URLAgentError(f"图片数据无效: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"Unexpected error extracting task info from image: {e}")
+            raise URLAgentError(f"图片任务信息提取失败: {str(e)}")
     
     async def create_task_from_info(self, task_info: TaskInfo, user_id: int, source_url: Optional[str] = None) -> int:
         """
@@ -571,6 +633,10 @@ class URLAgentService:
                     "url_parsing_agent": {
                         "initialized": self._url_parsing_agent is not None,
                         "status": "ready" if self._url_parsing_agent else "not_initialized"
+                    },
+                    "image_parsing_agent": {
+                        "initialized": self._image_parsing_agent is not None,
+                        "status": "ready" if self._image_parsing_agent else "not_initialized"
                     },
                     "task_creator": {
                         "initialized": self._task_creator is not None,

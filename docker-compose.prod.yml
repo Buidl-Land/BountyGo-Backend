@@ -1,10 +1,10 @@
-# BountyGo Backend Production Docker Compose Configuration
+# BountyGo Backend Docker Compose Configuration - Production
 # 生产环境配置
 
 version: '3.8'
 
 services:
-  # PostgreSQL Database (Production)
+  # PostgreSQL Database
   db:
     image: postgres:15-alpine
     container_name: bountygo-db-prod
@@ -16,16 +16,17 @@ services:
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./backups:/backups
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bountygo} -d ${POSTGRES_DB:-bountygo}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
-      - bountygo-prod-network
-    restart: always
+      - bountygo-network-prod
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -35,23 +36,32 @@ services:
           memory: 512M
           cpus: '0.25'
 
-  # Redis Cache (Production)
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: bountygo-redis-prod
-    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}"
+    command: >
+      redis-server 
+      --appendonly yes 
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
     volumes:
       - redis_data_prod:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
-      - bountygo-prod-network
-    restart: always
+      - bountygo-network-prod
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -61,28 +71,74 @@ services:
           memory: 256M
           cpus: '0.1'
 
-  # BountyGo Backend Application (Production)
+  # BountyGo Backend Application
   app:
     build:
       context: .
       dockerfile: Dockerfile.prod
+    image: bountygo-backend:${VERSION:-latest}
     container_name: bountygo-app-prod
     environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-bountygo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-bountygo}
+      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-20}
+      - DATABASE_MAX_OVERFLOW=${DATABASE_MAX_OVERFLOW:-40}
+      
+      # Redis Configuration
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - REDIS_CACHE_TTL=${REDIS_CACHE_TTL:-3600}
+      
+      # Application Configuration
       - ENVIRONMENT=production
       - DEBUG=false
-      # URL Agent Production Configuration
-      - CONTENT_EXTRACTION_TIMEOUT=60
-      - MAX_CONTENT_LENGTH=100000
-      - USE_PROXY=false
-      - ENABLE_CONTENT_CACHE=true
-      - CONTENT_CACHE_TTL=7200
-      - USER_AGENT=BountyGo-URLAgent/1.0
-      - MAX_REDIRECTS=5
-      - VERIFY_SSL=true
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      
+      # CORS Configuration
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
+      
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      
+      # PPIO Configuration
+      - PPIO_API_KEY=${PPIO_API_KEY}
+      - PPIO_BASE_URL=${PPIO_BASE_URL:-https://api.ppinfra.com/v3/openai}
+      - PPIO_MODEL_NAME=${PPIO_MODEL_NAME:-qwen/qwen3-coder-480b-a35b-instruct}
+      - PPIO_MAX_TOKENS=${PPIO_MAX_TOKENS:-4000}
+      - PPIO_TEMPERATURE=${PPIO_TEMPERATURE:-0.1}
+      - PPIO_TIMEOUT=${PPIO_TIMEOUT:-120}
+      - PPIO_MAX_RETRIES=${PPIO_MAX_RETRIES:-3}
+      
+      # Content Extraction Configuration
+      - CONTENT_EXTRACTION_TIMEOUT=${CONTENT_EXTRACTION_TIMEOUT:-60}
+      - MAX_CONTENT_LENGTH=${MAX_CONTENT_LENGTH:-100000}
+      - USE_PROXY=${USE_PROXY:-false}
+      - PROXY_URL=${PROXY_URL}
+      - ENABLE_CONTENT_CACHE=${ENABLE_CONTENT_CACHE:-true}
+      - CONTENT_CACHE_TTL=${CONTENT_CACHE_TTL:-7200}
+      - USER_AGENT=${USER_AGENT:-BountyGo-URLAgent/1.0}
+      - MAX_REDIRECTS=${MAX_REDIRECTS:-5}
+      - VERIFY_SSL=${VERIFY_SSL:-true}
+      
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
+      
+      # Performance Configuration
+      - MAX_CONCURRENT_AGENTS=${MAX_CONCURRENT_AGENTS:-10}
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-300}
+      - ENABLE_PERFORMANCE_MONITORING=${ENABLE_PERFORMANCE_MONITORING:-true}
+      
     env_file:
       - .env.prod
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./backups:/app/backups
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -91,12 +147,12 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
       start_period: 60s
     networks:
-      - bountygo-prod-network
-    restart: always
+      - bountygo-network-prod
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -105,30 +161,24 @@ services:
         reservations:
           memory: 1G
           cpus: '0.5'
-      replicas: 2
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 10s
+      replicas: 1
 
-  # Nginx Reverse Proxy (Production)
+  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: bountygo-nginx-prod
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
     ports:
       - "80:80"
       - "443:443"
     depends_on:
       - app
     networks:
-      - bountygo-prod-network
-    restart: always
+      - bountygo-network-prod
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -138,13 +188,118 @@ services:
           memory: 128M
           cpus: '0.1'
 
+  # Monitoring - Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bountygo-prometheus-prod
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data_prod:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - bountygo-network-prod
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Monitoring - Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bountygo-grafana-prod
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data_prod:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - bountygo-network-prod
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Log Management - Loki
+  loki:
+    image: grafana/loki:latest
+    container_name: bountygo-loki-prod
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data_prod:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - bountygo-network-prod
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Log Collection - Promtail
+  promtail:
+    image: grafana/promtail:latest
+    container_name: bountygo-promtail-prod
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - ./logs:/var/log/app:ro
+      - /var/log:/var/log/host:ro
+    depends_on:
+      - loki
+    networks:
+      - bountygo-network-prod
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
 volumes:
   postgres_data_prod:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/postgres
   redis_data_prod:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/redis
+  prometheus_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/prometheus
+  grafana_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/grafana
+  loki_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/loki
 
 networks:
-  bountygo-prod-network:
+  bountygo-network-prod:
     driver: bridge
-    name: bountygo-prod-network
+    name: bountygo-network-prod
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

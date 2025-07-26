@@ -1,39 +1,48 @@
+# Multi-stage production Dockerfile for BountyGo Backend
+# 多阶段生产环境Docker构建
+
+# Stage 1: Build stage
 FROM python:3.11-slim as builder
 
-# Set environment variables
+# Set environment variables for build
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     libxml2-dev \
     libxslt-dev \
     libjpeg-dev \
     zlib1g-dev \
     libffi-dev \
     libssl-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create and activate virtual environment
+# Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /tmp/
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Production stage
-FROM python:3.11-slim
+# Stage 2: Production stage
+FROM python:3.11-slim as production
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    ENVIRONMENT=production
 
-# Install runtime dependencies
+# Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     curl \
     libxml2 \
@@ -42,28 +51,47 @@ RUN apt-get update && apt-get install -y \
     zlib1g \
     libffi8 \
     libssl3 \
-    && rm -rf /var/lib/apt/lists/*
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy virtual environment from builder
+# Copy virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
+
+# Create non-root user
+RUN groupadd -r app && useradd -r -g app -d /app -s /bin/bash app
 
 # Set working directory
 WORKDIR /app
 
 # Copy application code
-COPY . .
+COPY --chown=app:app . .
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data && \
+    chown -R app:app /app
+
+# Switch to non-root user
 USER app
 
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check with more comprehensive checks
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health && \
+        curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Run application with gunicorn for production
-CMD ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+# Production startup command with gunicorn
+CMD ["gunicorn", "app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--keep-alive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--preload", \
+     "--access-logfile", "/app/logs/access.log", \
+     "--error-logfile", "/app/logs/error.log", \
+     "--log-level", "info"]

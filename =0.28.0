@@ -1,0 +1,7 @@
+Requirement already satisfied: httpx in /home/alfred/miniconda3/lib/python3.12/site-packages (0.25.2)
+Requirement already satisfied: anyio in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpx) (3.7.1)
+Requirement already satisfied: certifi in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpx) (2025.1.31)
+Requirement already satisfied: httpcore==1.* in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpx) (1.0.7)
+Requirement already satisfied: idna in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpx) (3.7)
+Requirement already satisfied: sniffio in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpx) (1.3.1)
+Requirement already satisfied: h11<0.15,>=0.13 in /home/alfred/miniconda3/lib/python3.12/site-packages (from httpcore==1.*->httpx) (0.14.0)

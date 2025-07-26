@@ -18,61 +18,75 @@ class TestAuthenticationIntegration:
     @pytest.mark.asyncio
     async def test_protected_endpoint_without_auth(self):
         """Test accessing protected endpoint without authentication"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/v1/auth/protected")
-            
-            assert response.status_code == 401
-            assert "Authentication required" in response.json()["detail"]
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        response = client.get("/api/v1/auth/protected")
+        
+        assert response.status_code == 401
+        # 检查中文或英文的认证错误消息
+        detail = response.json()["detail"]
+        assert "身份认证令牌" in detail or "Authentication required" in detail
     
     @pytest.mark.asyncio
     async def test_public_endpoint(self):
         """Test accessing public endpoint"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/v1/auth/public")
-            
-            assert response.status_code == 200
-            assert response.json()["message"] == "This is a public endpoint"
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        response = client.get("/api/v1/auth/public")
+        
+        assert response.status_code == 200
+        assert response.json()["message"] == "This is a public endpoint"
     
     @pytest.mark.asyncio
     async def test_optional_auth_endpoint_without_auth(self):
         """Test optional auth endpoint without authentication"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/v1/auth/optional-auth")
-            
-            assert response.status_code == 200
-            data = response.json()
-            assert data["authenticated"] is False
-            assert "anonymous user" in data["message"]
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        response = client.get("/api/v1/auth/optional-auth")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["authenticated"] is False
+        assert "anonymous user" in data["message"]
     
     @pytest.mark.asyncio
     async def test_invalid_token_format(self):
         """Test with invalid token format"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            headers = {"Authorization": "Bearer invalid_token_format"}
-            response = await client.get("/api/v1/auth/protected", headers=headers)
-            
-            assert response.status_code == 401
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        headers = {"Authorization": "Bearer invalid_token_format"}
+        response = client.get("/api/v1/auth/protected", headers=headers)
+        
+        assert response.status_code == 401
     
     @pytest.mark.asyncio
     async def test_malformed_authorization_header(self):
         """Test with malformed authorization header"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            headers = {"Authorization": "InvalidFormat token"}
-            response = await client.get("/api/v1/auth/protected", headers=headers)
-            
-            assert response.status_code == 401
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        headers = {"Authorization": "InvalidFormat token"}
+        response = client.get("/api/v1/auth/protected", headers=headers)
+        
+        assert response.status_code == 401
     
     @pytest.mark.asyncio
     async def test_refresh_token_invalid(self):
         """Test refresh token with invalid token"""
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/auth/refresh",
-                params={"refresh_token": "invalid_refresh_token"}
-            )
-            
-            assert response.status_code == 401
-            assert "Invalid refresh token" in response.json()["detail"]
+        from fastapi.testclient import TestClient
+        
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/auth/refresh",
+            params={"refresh_token": "invalid_refresh_token"}
+        )
+        
+        assert response.status_code == 401
+        assert "Invalid refresh token" in response.json()["detail"]
 
 
 class TestAuthenticationFlow:

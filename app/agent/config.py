@@ -1,11 +1,15 @@
 """
 Configuration for PPIO model and URL agent settings.
+Legacy configuration - use unified_config.py for new implementations.
 """
 import asyncio
 import aiohttp
 from typing import Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
+
+# Import unified config for compatibility
+from .unified_config import get_config_manager, AgentRole
 
 
 class PPIOModelConfig(BaseModel):
@@ -18,7 +22,8 @@ class PPIOModelConfig(BaseModel):
     timeout: int = Field(default=60, description="请求超时时间(秒)")
     max_retries: int = Field(default=3, description="最大重试次数")
 
-    @validator('api_key')
+    @field_validator('api_key')
+    @classmethod
     def validate_api_key(cls, v):
         """验证API密钥格式"""
         if not v or not isinstance(v, str):
@@ -29,14 +34,16 @@ class PPIOModelConfig(BaseModel):
             raise ValueError("API密钥长度过短")
         return v
 
-    @validator('temperature')
+    @field_validator('temperature')
+    @classmethod
     def validate_temperature(cls, v):
         """验证温度参数范围"""
         if not 0 <= v <= 2:
             raise ValueError("温度参数必须在0-2之间")
         return v
 
-    @validator('max_tokens')
+    @field_validator('max_tokens')
+    @classmethod
     def validate_max_tokens(cls, v):
         """验证最大token数"""
         if v <= 0 or v > 32000:
@@ -91,24 +98,65 @@ class PPIOModelConfig(BaseModel):
         ]
 
     def supports_structured_output(self) -> bool:
-        """检查当前模型是否支持结构化输出"""
-        structured_models = [
-            "qwen/qwen3-coder-480b-a35b-instruct",
-            "moonshotai/kimi-k2-instruct", 
-            "deepseek/deepseek-r1-0528",
-            "qwen/qwen3-235b-a22b-instruct-2507"
-        ]
-        return self.model_name in structured_models
-
-    def supports_function_calling(self) -> bool:
-        """检查当前模型是否支持function calling"""
-        function_calling_models = [
+        """检查模型是否支持结构化输出"""
+        structured_output_models = [
             "qwen/qwen3-coder-480b-a35b-instruct",
             "moonshotai/kimi-k2-instruct",
-            "deepseek/deepseek-r1-0528", 
-            "qwen/qwen3-235b-a22b-instruct-2507"
+            "qwen/qwen3-235b-a22b-instruct-2507",
+            "deepseek/deepseek-r1-0528",
+            "qwen/qwen2.5-72b-instruct",
+            "qwen/qwen2.5-32b-instruct",
+            "thudm/glm-4-32b-0414",
+            "qwen/qwen2.5-7b-instruct",
+            "baidu/ernie-4.5-vl-28b-a3b"
+        ]
+        return self.model_name in structured_output_models
+
+    def supports_function_calling(self) -> bool:
+        """检查模型是否支持函数调用"""
+        function_calling_models = [
+            "deepseek/deepseek-v3-0324",
+            "qwen/qwen3-coder-480b-a35b-instruct",
+            "moonshotai/kimi-k2-instruct",
+            "minimaxai/minimax-m1-80k",
+            "qwen/qwen3-235b-a22b-instruct-2507",
+            "deepseek/deepseek-r1-turbo",
+            "deepseek/deepseek-r1-0528",
+            "deepseek/deepseek-v3-turbo",
+            "deepseek/deepseek-v3/community",
+            "deepseek/deepseek-r1/community",
+            "baidu/ernie-4.5-vl-424b-a47b",
+            "baidu/ernie-4.5-300b-a47b-paddle",
+            "qwen/qwen2.5-72b-instruct",
+            "qwen/qwen2.5-32b-instruct",
+            "thudm/glm-4-32b-0414",
+            "qwen/qwen2.5-7b-instruct",
+            "baidu/ernie-4.5-0.3b",
+            "baidu/ernie-4.5-21B-a3b",
+            "baidu/ernie-4.5-vl-28b-a3b"
         ]
         return self.model_name in function_calling_models
+
+    def supports_vision(self) -> bool:
+        """检查模型是否支持视觉理解"""
+        vision_models = [
+            "thudm/glm-4.1v-9b-thinking",
+            "baidu/ernie-4.5-vl-424b-a47b", 
+            "qwen/qwen2.5-vl-72b-instruct",
+            "baidu/ernie-4.5-vl-28b-a3b"
+        ]
+        return self.model_name in vision_models
+
+    def get_preferred_vision_model(self) -> str:
+        """获取推荐的视觉语言模型"""
+        # 按性能和性价比排序
+        preferred_models = [
+            "baidu/ernie-4.5-vl-28b-a3b",  # 支持structured-outputs，免费
+            "thudm/glm-4.1v-9b-thinking",  # 9B参数，轻量高效
+            "qwen/qwen2.5-vl-72b-instruct", # 强大但成本较高
+            "baidu/ernie-4.5-vl-424b-a47b"  # 最强但成本最高
+        ]
+        return preferred_models[0]
 
 
 class URLAgentSettings(BaseSettings):
@@ -153,3 +201,27 @@ class URLAgentSettings(BaseSettings):
 
 # 全局设置实例
 url_agent_settings = URLAgentSettings()
+
+
+# 兼容性函数 - 从统一配置管理器获取配置
+async def get_unified_ppio_config():
+    """从统一配置管理器获取PPIO配置"""
+    try:
+        config_manager = await get_config_manager()
+        url_agent_config = config_manager.get_agent_config(AgentRole.URL_PARSER)
+        
+        if url_agent_config:
+            return PPIOModelConfig(
+                api_key=url_agent_config.api_key,
+                base_url=url_agent_config.base_url or "https://api.ppinfra.com/v3/openai",
+                model_name=url_agent_config.model_name,
+                max_tokens=url_agent_config.max_tokens,
+                temperature=url_agent_config.temperature,
+                timeout=url_agent_config.timeout,
+                max_retries=url_agent_config.max_retries
+            )
+    except Exception:
+        pass
+    
+    # 回退到传统配置
+    return url_agent_settings.get_ppio_config()

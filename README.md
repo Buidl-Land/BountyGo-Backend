@@ -15,6 +15,20 @@ BountyGo是一个智能赏金任务聚合和匹配平台，解决Web3赏金生�
 - **多网站支持**: 支持GitHub、Twitter/X、任务众包平台等29+网站
 - **实时处理**: 端到端处理时间< 15秒，高效稳定
 
+#### 🖼️ 智能图片解析（新增功能）
+- **视觉任务识别**: 从图片中智能提取任务信息
+- **多格式支持**: 支持JPG、PNG、GIF、BMP、WebP等格式
+- **PPIO视觉模型**: 使用先进的视觉语言模型进行图片分析
+- **场景适配**: 支持任务截图、招聘海报、需求文档等多种场景
+- **结构化输出**: 自动转换为标准JSON格式的任务信息
+
+#### 🤝 多Agent协作系统（CAMEL-AI集成）
+- **专业化分工**: 不同Agent负责不同专业领域（URL解析、图片分析、质量检查等）
+- **CAMEL-AI Workforce**: 集成业界领先的多Agent协作框架
+- **智能模型选择**: 根据任务类型自动选择最适合的AI模型
+- **协作模式**: 支持Pipeline、Hierarchical、Workforce等多种协作模式
+- **可配置架构**: 支持环境变量和代码配置两种方式
+
 #### 🔐 身份认证与用户管理
 - JWT + Google OAuth 身份认证
 - 用户管理和Web3钱包集成
@@ -50,9 +64,12 @@ BountyGo是一个智能赏金任务聚合和匹配平台，解决Web3赏金生�
 - **Redis**: 会话管理和缓存
 
 ### 🤖 AI与智能处理
-- **PPIO模型**: 先进的AI语言模型，支持中英文
+- **PPIO模型**: 先进的AI语言模型，支持中英文和视觉理解
+- **PPIO视觉模型**: 支持图片分析的多模态AI模型
+- **CAMEL-AI**: 业界领先的多Agent协作框架，支持Workforce模块
 - **Playwright**: 企业级网页自动化和反爬虫技术
 - **BeautifulSoup4 + Readability**: 智能内容提取
+- **Pillow (PIL)**: 图片处理和格式转换
 - **异步处理**: 全异步AI推理和内容处理
 
 ### 安全与认证
@@ -85,6 +102,9 @@ source venv/bin/activate  # Linux/Mac
 
 # 安装Python依赖
 pip install -r requirements.txt
+
+# 可选：安装CAMEL-AI多Agent框架
+pip install camel-ai  # 启用多Agent协作功能
 ```
 
 ### 2. 环境配置
@@ -107,10 +127,18 @@ REDIS_URL=redis://host:port/db
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-# 🤖 URL Agent配置（新增）
+# 🤖 AI Agent配置（URL解析 + 图片解析 + 多Agent协作）
 PPIO_API_KEY=your-ppio-api-key
 PPIO_BASE_URL=https://api.ppinfra.com/v3/openai
 PPIO_MODEL_NAME=moonshotai/kimi-k2-instruct
+
+# 多Agent系统配置（可选）
+MULTI_AGENT_FRAMEWORK=camel-ai
+URL_PARSER_MODEL=qwen/qwen3-coder-480b-a35b-instruct
+IMAGE_ANALYZER_MODEL=baidu/ernie-4.5-vl-28b-a3b
+CONTENT_EXTRACTOR_MODEL=moonshotai/kimi-k2-instruct
+TASK_CREATOR_MODEL=deepseek/deepseek-r1-0528
+QUALITY_CHECKER_MODEL=qwen/qwen3-235b-a22b-instruct-2507
 
 # CORS配置
 ALLOWED_HOSTS=*
@@ -581,6 +609,42 @@ export PPIO_API_KEY=your-production-api-key
 - [ ] Web3身份验证
 - [ ] DeFi协议集成
 - [ ] NFT任务凭证
+
+## 📚 API文档
+
+完整的API使用文档请参考：
+
+- **[URL Agent API 文档](./docs/URL_AGENT_API.md)** - URL解析和图片解析API
+- **[多Agent系统配置指南](./docs/multi_agent_configuration.md)** - CAMEL-AI多Agent协作配置
+- **[图片解析API 详细文档](./docs/image_parsing_api.md)** - 图片分析功能的完整说明
+
+### 🎯 快速体验
+
+```bash
+# URL解析
+curl -X POST "http://localhost:8000/api/v1/url-agent/extract-info" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://github.com/example/project"}'
+
+# 图片解析
+curl -X POST "http://localhost:8000/api/v1/url-agent/upload-image" \
+  -F "file=@task_image.png" \
+  -F "additional_prompt=请分析任务信息"
+
+# 多Agent协作（Python示例）
+python -c "
+from app.agent.camel_workforce_service import create_camel_workforce_service
+import asyncio
+
+async def demo():
+    service = create_camel_workforce_service(workforce_size=3)
+    await service.initialize()
+    result = await service.process_url_with_workforce('https://github.com/example/project')
+    print(f'任务标题: {result.title}')
+
+asyncio.run(demo())
+"
+```
 
 ## 📄 许可证
 

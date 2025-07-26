@@ -426,8 +426,65 @@ except requests.exceptions.RequestException as e:
 - 基础的任务信息提取功能
 - 服务状态监控
 
+### 3. 图片解析功能
+
+#### 从Base64图片提取任务信息
+
+**POST** `/api/v1/url-agent/extract-from-image`
+
+从Base64编码的图片中提取结构化任务信息。
+
+#### 请求参数
+
+```json
+{
+  "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+  "additional_prompt": "请重点分析技术要求",
+  "context": {
+    "task_type": "编程",
+    "platform": "GitHub",
+    "language": "中文"
+  }
+}
+```
+
+#### 使用示例
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/url-agent/extract-from-image" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image_base64": "data:image/png;base64,iVBORw0KGgoAAAANS...",
+    "additional_prompt": "请分析这个任务截图"
+  }'
+```
+
+#### 文件上传图片解析
+
+**POST** `/api/v1/url-agent/upload-image`
+
+直接上传图片文件进行任务信息提取。
+
+#### 请求参数（multipart/form-data）
+
+- `file`: 图片文件 (支持 JPG, PNG, GIF, BMP, WebP)
+- `additional_prompt`: 额外分析提示（可选）
+- `context_json`: JSON格式的上下文信息（可选）
+
+#### 使用示例
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/url-agent/upload-image" \
+  -F "file=@task_screenshot.png" \
+  -F "additional_prompt=请提取任务的奖励信息" \
+  -F 'context_json={"task_type":"编程","language":"中文"}'
+```
+
+**注意**: 图片解析功能的详细文档请参考：[图片解析API文档](./image_parsing_api.md)
+
 ### 未来计划
 - 支持更多平台URL
 - 批量处理功能
 - 结果缓存优化
 - 更精确的AI分析模型
+- 视频内容解析功能

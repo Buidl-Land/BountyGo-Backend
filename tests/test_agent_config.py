@@ -31,7 +31,7 @@ class TestPPIOModelConfig:
         config = PPIOModelConfig(api_key="sk_test_key")
         
         assert config.base_url == "https://api.ppinfra.com/v3/openai"
-        assert config.model_name == "qwen/qwen3-coder-480b-a35b-instruct"
+        assert config.model_name == "moonshotai/kimi-k2-instruct"  # 修正为实际的默认值
         assert config.max_tokens == 4000
         assert config.temperature == 0.1
         assert config.timeout == 60

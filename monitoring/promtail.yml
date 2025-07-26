@@ -1,0 +1,113 @@
+# Promtail configuration for BountyGo Backend log collection
+# BountyGo后端日志收集的Promtail配置
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # BountyGo Application Logs
+  - job_name: bountygo-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: bountygo-app
+          service: backend
+          environment: production
+          __path__: /var/log/app/*.log
+
+  # Nginx Access Logs
+  - job_name: nginx-access
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          service: reverse-proxy
+          log_type: access
+          environment: production
+          __path__: /var/log/nginx/access.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<remote_addr>\S+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<protocol>\S+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)" "(?P<http_x_forwarded_for>[^"]*)" rt=(?P<request_time>\S+) uct="(?P<upstream_connect_time>\S+)" uht="(?P<upstream_header_time>\S+)" urt="(?P<upstream_response_time>\S+)"'
+      - labels:
+          method:
+          status:
+          path:
+      - timestamp:
+          source: time_local
+          format: '02/Jan/2006:15:04:05 -0700'
+
+  # Nginx Error Logs
+  - job_name: nginx-error
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          service: reverse-proxy
+          log_type: error
+          environment: production
+          __path__: /var/log/nginx/error.log
+
+  # System Logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          service: host
+          environment: production
+          __path__: /var/log/host/syslog
+    pipeline_stages:
+      - match:
+          selector: '{job="system"}'
+          stages:
+            - regex:
+                expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+) (?P<hostname>\S+) (?P<service>\S+): (?P<message>.*)'
+            - labels:
+                service:
+            - timestamp:
+                source: timestamp
+                format: 'Jan 2 15:04:05'
+
+  # Docker Container Logs (if using Docker logging driver)
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          service: containers
+          environment: production
+          __path__: /var/log/host/docker/*.log
+
+  # PostgreSQL Logs
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: postgres
+          service: database
+          environment: production
+          __path__: /var/log/app/postgres/*.log
+
+  # Redis Logs
+  - job_name: redis
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: redis
+          service: cache
+          environment: production
+          __path__: /var/log/app/redis/*.log

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 
 # Import routers
 from app.api.v1.auth import router as auth_router
-from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket
+from app.api.v1.endpoints import users, tasks, tags, analytics, url_agent, notifications, websocket, multi_agent
 
 api_router = APIRouter()
 
@@ -18,6 +18,7 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["📊 Ana
 api_router.include_router(url_agent.router, prefix="/url-agent", tags=["🤖 URL Agent"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["🔔 Notifications"])
 api_router.include_router(websocket.router, prefix="/ws", tags=["🔌 WebSocket"])
+api_router.include_router(multi_agent.router, prefix="/multi-agent", tags=["🧠 Multi-Agent"])
 
 
 @api_router.get("/", summary="API信息", tags=["ℹ️ System"])
@@ -56,7 +57,8 @@ async def api_info():
             "analytics": "/api/v1/analytics",
             "url_agent": "/api/v1/url-agent",
             "notifications": "/api/v1/notifications",
-            "websocket": "/api/v1/ws"
+            "websocket": "/api/v1/ws",
+            "multi_agent": "/api/v1/multi-agent"
         },
         "authentication": {
             "required_for": [
