@@ -438,3 +438,9 @@ def get_health_history(limit: int = 10) -> List[Dict[str, Any]]:
     """获取健康检查历史"""
     health_checker = get_health_checker()
     return health_checker.get_health_history(limit)
+
+
+# 兼容main分支的函数
+async def get_system_health() -> Dict[str, Any]:
+    """Get comprehensive system health status (compatibility function)"""
+    return await check_health()
