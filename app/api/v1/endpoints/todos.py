@@ -39,25 +39,25 @@ async def get_todos(
     query = select(Todo).options(
         selectinload(Todo.task)
     ).where(Todo.user_id == current_user.id)
-    
+
     # 筛选条件
     if is_completed is not None:
         query = query.where(Todo.is_completed == is_completed)
-    
+
     if is_active is not None:
         query = query.where(Todo.is_active == is_active)
-    
+
     # 排序：未完成的在前，按创建时间倒序
     query = query.order_by(Todo.is_completed.asc(), Todo.created_at.desc())
-    
+
     # 分页
     offset = (page - 1) * size
     query = query.offset(offset).limit(size)
-    
+
     # 执行查询
     result = await db.execute(query)
     todos = result.scalars().all()
-    
+
     return todos
 
 
@@ -69,7 +69,7 @@ async def create_todo(
 ):
     """
     创建新的Todo项目
-    
+
     - 如果提供task_id，则创建任务相关的todo
     - 如果不提供task_id，则创建私人todo（需要提供title）
     """
@@ -79,7 +79,7 @@ async def create_todo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="私人todo必须提供标题"
         )
-    
+
     # 如果是任务相关的todo，验证任务是否存在
     if todo_data.task_id:
         result = await db.execute(
@@ -91,18 +91,24 @@ async def create_todo(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="任务不存在"
             )
-    
+
     # 创建todo
     todo_dict = todo_data.model_dump()
+
+    # 将remind_flags转换为JSON字符串
+    if todo_dict.get("remind_flags"):
+        import json
+        todo_dict["remind_flags"] = json.dumps(todo_dict["remind_flags"])
+
     new_todo = Todo(
         user_id=current_user.id,
         **todo_dict
     )
-    
+
     db.add(new_todo)
     await db.commit()
     await db.refresh(new_todo)
-    
+
     # 重新查询以获取关联数据
     result = await db.execute(
         select(Todo).options(
@@ -110,7 +116,7 @@ async def create_todo(
         ).where(Todo.id == new_todo.id)
     )
     todo_with_task = result.scalar_one()
-    
+
     return todo_with_task
 
 
@@ -136,21 +142,27 @@ async def update_todo(
         )
     )
     todo = result.scalar_one_or_none()
-    
+
     if not todo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo不存在或无权限访问"
         )
-    
+
     # 更新字段
     update_data = todo_data.model_dump(exclude_unset=True)
+
+    # 将remind_flags转换为JSON字符串
+    if "remind_flags" in update_data and update_data["remind_flags"] is not None:
+        import json
+        update_data["remind_flags"] = json.dumps(update_data["remind_flags"])
+
     for field, value in update_data.items():
         setattr(todo, field, value)
-    
+
     await db.commit()
     await db.refresh(todo)
-    
+
     return todo
 
 
@@ -173,16 +185,16 @@ async def delete_todo(
         )
     )
     todo = result.scalar_one_or_none()
-    
+
     if not todo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo不存在或无权限访问"
         )
-    
+
     await db.delete(todo)
     await db.commit()
-    
+
     return SuccessResponse(message="Todo删除成功")
 
 
@@ -207,17 +219,17 @@ async def complete_todo(
         )
     )
     todo = result.scalar_one_or_none()
-    
+
     if not todo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo不存在或无权限访问"
         )
-    
+
     todo.is_completed = True
     await db.commit()
     await db.refresh(todo)
-    
+
     return todo
 
 
@@ -242,15 +254,15 @@ async def uncomplete_todo(
         )
     )
     todo = result.scalar_one_or_none()
-    
+
     if not todo:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo不存在或无权限访问"
         )
-    
+
     todo.is_completed = False
     await db.commit()
     await db.refresh(todo)
-    
+
     return todo
