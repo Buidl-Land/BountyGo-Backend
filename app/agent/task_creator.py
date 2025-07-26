@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 
-from app.models.task import Task, TaskTag
+from app.models.task import Task, TaskTag, Organizer
 from app.models.tag import Tag as TagModel
 from app.agent.models import TaskInfo
 from app.agent.exceptions import TaskCreationError
@@ -56,15 +56,15 @@ class TaskCreator:
 
             # Handle organizer information
             organizer_id = None
-            if validated_info.organizer and validated_info.organizer.name:
-                organizer_id = await self._get_or_create_organizer(validated_info.organizer)
+            if validated_info.organizer_name:
+                organizer_id = await self._get_or_create_organizer(validated_info.organizer_name)
 
             # Create task instance
             task = Task(
                 title=validated_info.title,
                 summary=validated_info.summary,
                 description=validated_info.description,
-                reward=validated_info.reward,
+                category=validated_info.category,
                 reward_details=validated_info.reward_details,
                 reward_type=validated_info.reward_type,
                 deadline=validated_info.deadline,
@@ -119,20 +119,8 @@ class TaskCreator:
             title = title[:255]
             logger.warning(f"Task title truncated to 255 characters")
 
-        # Validate reward
-        reward = task_info.reward
-        if reward is not None:
-            if reward < 0:
-                logger.warning("Negative reward amount, setting to None")
-                reward = None
-            elif reward > Decimal('999999999999.999999'):
-                logger.warning("Reward amount too large, setting to None")
-                reward = None
-
-        # Validate currency
-        currency = task_info.reward_currency or "USD"
-        if len(currency) > 10:
-            currency = currency[:10]
+        # Note: reward and reward_currency are stored in reward_details field
+        # No separate validation needed as they're part of the description
 
         # Validate description
         description = task_info.description
@@ -151,13 +139,19 @@ class TaskCreator:
 
         return TaskInfo(
             title=title,
+            summary=task_info.summary,
             description=description,
-            reward=reward,
-            reward_currency=currency,
+            category=task_info.category,
+            reward_details=task_info.reward_details,
+            reward_type=task_info.reward_type,
+            reward=task_info.reward,
+            reward_currency=task_info.reward_currency,
             deadline=task_info.deadline,
             tags=tags,
             difficulty_level=task_info.difficulty_level,
-            estimated_hours=task_info.estimated_hours
+            estimated_hours=task_info.estimated_hours,
+            organizer_name=task_info.organizer_name,
+            external_link=task_info.external_link
         )
 
     async def _associate_tags(self, task: Task, tag_names: List[str]) -> None:
@@ -246,10 +240,13 @@ class TaskCreator:
 
             # Update task fields
             task.title = validated_info.title
+            task.summary = validated_info.summary
             task.description = validated_info.description
-            task.reward = validated_info.reward
-            task.reward_currency = validated_info.reward_currency
+            task.category = validated_info.category
+            task.reward_details = validated_info.reward_details
+            task.reward_type = validated_info.reward_type
             task.deadline = validated_info.deadline
+            task.external_link = validated_info.external_link
             task.updated_at = datetime.utcnow()
 
             # Update tags if provided
@@ -318,3 +315,39 @@ class TaskCreator:
             await self.db_session.rollback()
             logger.error(f"Unexpected error deleting task {task_id}: {str(e)}")
             raise TaskCreationError(f"Failed to delete task: {str(e)}")
+
+    async def _get_or_create_organizer(self, organizer_name: str) -> Optional[int]:
+        """
+        Get or create organizer by name.
+
+        Args:
+            organizer_name: Name of the organizer
+
+        Returns:
+            Optional[int]: Organizer ID if created/found, None if failed
+        """
+        try:
+            # Check if organizer exists
+            result = await self.db_session.execute(
+                select(Organizer).where(Organizer.name == organizer_name)
+            )
+            organizer = result.scalar_one_or_none()
+
+            if not organizer:
+                # Create new organizer
+                organizer = Organizer(
+                    name=organizer_name,
+                    is_verified=False  # Default to unverified
+                )
+                self.db_session.add(organizer)
+                await self.db_session.flush()  # Get organizer ID
+                logger.info(f"Created new organizer: {organizer_name}")
+
+            return organizer.id
+
+        except SQLAlchemyError as e:
+            logger.error(f"Error handling organizer '{organizer_name}': {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error handling organizer '{organizer_name}': {str(e)}")
+            return None

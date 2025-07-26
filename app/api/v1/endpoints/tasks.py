@@ -393,14 +393,16 @@ async def join_task(
 
     # 创建待办事项
     todo_dict = todo_data.model_dump()
-    
+
+    # 设置task_id（覆盖可能存在的值）
+    todo_dict["task_id"] = task_id
+
     # 将remind_flags转换为JSON字符串
     if todo_dict.get("remind_flags"):
         todo_dict["remind_flags"] = json.dumps(todo_dict["remind_flags"])
-    
+
     new_todo = Todo(
         user_id=current_user.id,
-        task_id=task_id,
         **todo_dict
     )
 

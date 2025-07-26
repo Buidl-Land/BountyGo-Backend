@@ -423,8 +423,9 @@ class TestContentExtractorIntegration:
     @pytest.mark.asyncio
     async def test_real_url_extraction(self):
         """测试真实URL提取（需要网络连接）"""
+        # 注意：现在主要使用PlaywrightContentExtractor进行复杂网站的内容提取
         # 这个测试需要真实的网络连接，在CI环境中可能需要跳过
-        pytest.skip("需要网络连接的集成测试")
+        pytest.skip("需要网络连接的集成测试，主要功能已转移到PlaywrightContentExtractor")
         
         try:
             result = await self.extractor.extract_content("https://httpbin.org/html")

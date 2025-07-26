@@ -2,9 +2,10 @@
 Task-related Pydantic schemas
 """
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from enum import Enum
+import json
 
 from .tag import Tag
 from .user import User
@@ -157,6 +158,17 @@ class Todo(TodoBase):
     task: Optional[TaskSummary] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('remind_flags', mode='before')
+    @classmethod
+    def parse_remind_flags(cls, v):
+        """Parse remind_flags from JSON string to dict"""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {"t_3d": True, "t_1d": True, "ddl_2h": True}
+        return v
 
 
 # Message schemas

@@ -52,6 +52,11 @@ class URLParsingAgent:
     "category": "任务分类或null",
     "reward_details": "奖励详情描述或null",
     "reward_type": "奖励分类或null",
+    "reward": 奖励金额数字或null,
+    "reward_currency": "奖励货币如USD、USDC等或null",
+    "tags": ["标签1", "标签2"] 或null,
+    "difficulty_level": "难度等级如初级、中级、高级或null",
+    "estimated_hours": 预估工时数字或null,
     "organizer_name": "主办方名称或null",
     "external_link": "活动原始链接或null"
 }
@@ -180,7 +185,15 @@ class URLParsingAgent:
                 description=validated_data.get("description"),
                 deadline=validated_data.get("deadline"),
                 category=category, # 使用验证后的分类
-                organizer_name=validated_data.get("organizer_name")
+                reward_details=validated_data.get("reward_details"),
+                reward_type=validated_data.get("reward_type"),
+                reward=validated_data.get("reward"),
+                reward_currency=validated_data.get("reward_currency"),
+                tags=validated_data.get("tags"),
+                difficulty_level=validated_data.get("difficulty_level"),
+                estimated_hours=validated_data.get("estimated_hours"),
+                organizer_name=validated_data.get("organizer_name"),
+                external_link=validated_data.get("external_link")
             )
 
             # 使用Pydantic验证
@@ -276,6 +289,69 @@ class URLParsingAgent:
             else:
                 data["reward_type"] = reward_type
 
+        # 验证奖励金额
+        if data.get("reward"):
+            try:
+                reward = float(data["reward"])
+                if reward < 0:
+                    logger.warning("Negative reward amount, setting to None")
+                    data["reward"] = None
+                else:
+                    data["reward"] = reward
+            except (ValueError, TypeError):
+                logger.warning("Invalid reward amount, setting to None")
+                data["reward"] = None
+
+        # 验证奖励货币
+        if data.get("reward_currency") and isinstance(data["reward_currency"], str):
+            currency = data["reward_currency"].strip().upper()
+            if len(currency) > 10:
+                logger.warning("Currency code too long, truncating")
+                currency = currency[:10]
+            data["reward_currency"] = currency if currency else None
+
+        # 验证标签
+        if data.get("tags") and isinstance(data["tags"], list):
+            clean_tags = []
+            for tag in data["tags"]:
+                if isinstance(tag, str) and tag.strip():
+                    clean_tag = tag.strip()[:50]  # 限制标签长度
+                    if clean_tag not in clean_tags:
+                        clean_tags.append(clean_tag)
+            data["tags"] = clean_tags if clean_tags else None
+
+        # 验证难度等级
+        if data.get("difficulty_level") and isinstance(data["difficulty_level"], str):
+            difficulty = data["difficulty_level"].strip()
+            if len(difficulty) > 20:
+                logger.warning("Difficulty level too long, truncating")
+                difficulty = difficulty[:20]
+            data["difficulty_level"] = difficulty if difficulty else None
+
+        # 验证预估工时
+        if data.get("estimated_hours"):
+            try:
+                hours = int(data["estimated_hours"])
+                if hours < 0:
+                    logger.warning("Negative estimated hours, setting to None")
+                    data["estimated_hours"] = None
+                elif hours > 10000:  # 防止过大的值
+                    logger.warning("Estimated hours too large, setting to None")
+                    data["estimated_hours"] = None
+                else:
+                    data["estimated_hours"] = hours
+            except (ValueError, TypeError):
+                logger.warning("Invalid estimated hours, setting to None")
+                data["estimated_hours"] = None
+
+        # 验证外部链接
+        if data.get("external_link") and isinstance(data["external_link"], str):
+            link = data["external_link"].strip()
+            if len(link) > 2000:
+                logger.warning("External link too long, truncating")
+                link = link[:2000]
+            data["external_link"] = link if link else None
+
         return data
 
 
@@ -358,7 +434,7 @@ class URLParsingAgent:
                 title="Test Task",
                 content="This is a test task for Python development. Reward: $100. Deadline: 2024-12-31.",
                 meta_description="Test task description",
-                extracted_at=datetime.now(datetime.timezone.utc)
+                extracted_at=datetime.utcnow()
             )
 
             # 测试分析功能

@@ -355,7 +355,7 @@ class ImageParsingAgent:
                 description=response_data.get("description"),
                 reward=response_data.get("reward"),
                 reward_currency=response_data.get("reward_currency") or "USD",
-                deadline=response_data.get("deadline"),
+                deadline=self._parse_deadline(response_data.get("deadline")) if response_data.get("deadline") else None,
                 tags=response_data.get("tags", []),
                 difficulty_level=response_data.get("difficulty_level"),
                 estimated_hours=response_data.get("estimated_hours")
@@ -370,6 +370,27 @@ class ImageParsingAgent:
         except Exception as e:
             logger.error(f"Failed to parse response: {e}")
             raise ModelAPIError(f"Response parsing failed: {str(e)}")
+    
+    def _parse_deadline(self, deadline_str: str) -> Optional[int]:
+        """解析日期字符串为时间戳"""
+        if not deadline_str:
+            return None
+        
+        try:
+            from datetime import datetime
+            import time
+            
+            # 尝试解析ISO格式
+            if 'T' in deadline_str:
+                dt = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+            else:
+                # 尝试解析日期格式
+                dt = datetime.strptime(deadline_str, '%Y-%m-%d')
+            
+            return int(dt.timestamp())
+        except Exception as e:
+            logger.warning(f"Failed to parse deadline '{deadline_str}': {e}")
+            return None
     
     async def analyze_image_with_context(
         self, 
