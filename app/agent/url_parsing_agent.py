@@ -63,8 +63,10 @@ class URLParsingAgent:
 
 分析时请注意：
 1. 提取准确的任务标题、简介和详细描述
-2. 查找截止日期信息，同时提供日期格式和时间戳
-3. 根据内容判断任务分类，可以是任何合理的分类名称，建议分类包括：
+2. 截止日期处理：
+   - 如果内容中有明确的截止日期，提取并转换为时间戳
+   - 如果没有截止日期信息，默认设置为当前时间+30天的时间戳
+3. 根据内容判断任务分类，如果无法确定分类，默认设置为"其他"，建议分类包括：
    - 黑客松: 编程竞赛、开发比赛、技术挑战、Hackathon
    - 征文: 文章写作、内容创作、博客征集、写作比赛
    - Meme创作: 表情包制作、创意图片、幽默内容、设计比赛
@@ -73,21 +75,24 @@ class URLParsingAgent:
    - 开发实战: 代码实现、技术学习、项目开发、编程练习
    - 交易竞赛：交易比赛、交易竞赛、交易挑战、交易活动
    - 答题竞赛：答题比赛、答题竞赛、答题挑战、答题活动
-   - 或其他任何合理的分类名称
-4. 提取奖励信息：
-   - reward_details: 所有奖励的总数，如"总共10000u"
-   - reward_type: 奖励分配方式，可选值：
+   - 其他: 无法明确分类的任务
+4. 提取奖励信息（重要限制）：
+   - reward_details: 奖励详情描述，必须控制在15个字符以内，如"1000U"、"NFT白名单"、"积分奖励"
+   - reward_type: 奖励分配方式，如果无法确定则默认为"抽奖"，可选值：
      * "每人": 每个获奖者都能获得完整奖励
      * "瓜分": 多个获奖者平分总奖励
-     * "抽奖": 随机抽取获奖者
+     * "抽奖": 随机抽取获奖者（默认值）
      * "积分": 以积分形式发放奖励
      * "权益": 非现金奖励，如NFT、白名单等
 5. 识别主办方名称：
    - 从页面内容中推断组织名称、公司名称或个人名称
-   - 如果无法确定具体主办方，可以设置为null
+   - 如果无法确定具体主办方，默认设置为"未知主办方"
+6. 默认值设置：
+   - difficulty_level: 如果无法确定，默认设置为"中级"
+   - estimated_hours: 如果无法确定，默认设置为8小时
+   - tags: 如果无法提取标签，至少设置一个通用标签如["任务"]
 
-如果某些信息无法从内容中提取，请设置为null。
-请确保返回的JSON格式正确，不要包含任何额外的文本。"""
+请确保返回的JSON格式正确，不要包含任何额外的文本。所有空字段都应该有合理的默认值，避免返回null。"""
 
     async def analyze_content(self, web_content: WebContent) -> TaskInfo:
         """
@@ -250,44 +255,57 @@ class URLParsingAgent:
             if len(organizer_name) > 255:
                 logger.warning("Organizer name too long, truncating")
                 organizer_name = organizer_name[:255]
-            data["organizer_name"] = organizer_name if organizer_name else None
+            data["organizer_name"] = organizer_name if organizer_name else "未知主办方"
+        else:
+            # 如果没有主办方名称，设置默认值
+            data["organizer_name"] = "未知主办方"
 
         # 验证截止日期时间戳
+        import time
+        current_time = int(time.time())
+        
         if data.get("deadline"):
             try:
                 timestamp = int(data["deadline"])
                 # 验证时间戳是否合理（不能是过去太久或未来太远）
-                import time
-                current_time = int(time.time())
                 if timestamp < current_time - 86400:  # 不能早于昨天
-                    logger.warning("Deadline timestamp is in the past, setting to None")
-                    data["deadline"] = None
+                    logger.warning("Deadline timestamp is in the past, setting to default (30 days)")
+                    data["deadline"] = current_time + 30 * 24 * 3600  # 30天后
                 elif timestamp > current_time + 365 * 24 * 3600:  # 不能超过一年后
-                    logger.warning("Deadline timestamp is too far in future, setting to None")
-                    data["deadline"] = None
+                    logger.warning("Deadline timestamp is too far in future, setting to default (30 days)")
+                    data["deadline"] = current_time + 30 * 24 * 3600  # 30天后
                 else:
                     data["deadline"] = timestamp
             except (ValueError, TypeError):
-                logger.warning("Invalid deadline timestamp, setting to None")
-                data["deadline"] = None
+                logger.warning("Invalid deadline timestamp, setting to default (30 days)")
+                data["deadline"] = current_time + 30 * 24 * 3600  # 30天后
+        else:
+            # 如果没有截止日期，默认设置为30天后
+            data["deadline"] = current_time + 30 * 24 * 3600
 
-        # 验证奖励详情
+        # 验证奖励详情（限制15字符）
         if data.get("reward_details") and isinstance(data["reward_details"], str):
             reward_details = data["reward_details"].strip()
-            if len(reward_details) > 1000:
-                logger.warning("Reward details too long, truncating")
-                reward_details = reward_details[:1000]
-            data["reward_details"] = reward_details if reward_details else None
+            if len(reward_details) > 15:
+                logger.warning(f"Reward details too long ({len(reward_details)} chars), truncating to 15 chars")
+                reward_details = reward_details[:15]
+            data["reward_details"] = reward_details if reward_details else "待定奖励"
+        else:
+            # 如果没有奖励详情，设置默认值
+            data["reward_details"] = "待定奖励"
 
         # 验证奖励分类
         if data.get("reward_type") and isinstance(data["reward_type"], str):
             reward_type = data["reward_type"].strip()
             valid_reward_types = ["每人", "瓜分", "抽奖", "积分", "权益"]
             if reward_type not in valid_reward_types:
-                logger.warning(f"Invalid reward type: {reward_type}, setting to None")
-                data["reward_type"] = None
+                logger.warning(f"Invalid reward type: {reward_type}, setting to default (抽奖)")
+                data["reward_type"] = "抽奖"
             else:
                 data["reward_type"] = reward_type
+        else:
+            # 如果没有奖励分类，设置默认值
+            data["reward_type"] = "抽奖"
 
         # 验证奖励金额
         if data.get("reward"):
@@ -318,7 +336,10 @@ class URLParsingAgent:
                     clean_tag = tag.strip()[:50]  # 限制标签长度
                     if clean_tag not in clean_tags:
                         clean_tags.append(clean_tag)
-            data["tags"] = clean_tags if clean_tags else None
+            data["tags"] = clean_tags if clean_tags else ["任务"]
+        else:
+            # 如果没有标签，设置默认值
+            data["tags"] = ["任务"]
 
         # 验证难度等级
         if data.get("difficulty_level") and isinstance(data["difficulty_level"], str):
@@ -326,23 +347,29 @@ class URLParsingAgent:
             if len(difficulty) > 20:
                 logger.warning("Difficulty level too long, truncating")
                 difficulty = difficulty[:20]
-            data["difficulty_level"] = difficulty if difficulty else None
+            data["difficulty_level"] = difficulty if difficulty else "中级"
+        else:
+            # 如果没有难度等级，设置默认值
+            data["difficulty_level"] = "中级"
 
         # 验证预估工时
         if data.get("estimated_hours"):
             try:
                 hours = int(data["estimated_hours"])
                 if hours < 0:
-                    logger.warning("Negative estimated hours, setting to None")
-                    data["estimated_hours"] = None
+                    logger.warning("Negative estimated hours, setting to default (8)")
+                    data["estimated_hours"] = 8
                 elif hours > 10000:  # 防止过大的值
-                    logger.warning("Estimated hours too large, setting to None")
-                    data["estimated_hours"] = None
+                    logger.warning("Estimated hours too large, setting to default (8)")
+                    data["estimated_hours"] = 8
                 else:
                     data["estimated_hours"] = hours
             except (ValueError, TypeError):
-                logger.warning("Invalid estimated hours, setting to None")
-                data["estimated_hours"] = None
+                logger.warning("Invalid estimated hours, setting to default (8)")
+                data["estimated_hours"] = 8
+        else:
+            # 如果没有预估工时，设置默认值
+            data["estimated_hours"] = 8
 
         # 验证外部链接
         if data.get("external_link") and isinstance(data["external_link"], str):
@@ -356,14 +383,14 @@ class URLParsingAgent:
 
 
 
-    def _validate_category(self, category: Optional[str]) -> Optional[str]:
-        """验证任务分类 - 只校验是否有分类，不强制要求特定分类"""
+    def _validate_category(self, category: Optional[str]) -> str:
+        """验证任务分类 - 如果没有分类则返回默认值"""
         if not category:
-            return None
+            return "其他"
 
         category_clean = category.strip()
         if len(category_clean) == 0:
-            return None
+            return "其他"
 
         # 不再强制要求特定分类，只返回清理后的分类名称
         # 限制长度避免过长
