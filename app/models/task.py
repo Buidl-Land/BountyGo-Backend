@@ -35,6 +35,8 @@ class Task(Base, TimestampMixin):
     summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, comment="任务简介")
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="任务分类")
+    reward_details: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="奖励详情")
+    reward_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="奖励分类")
     deadline: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="截止日期时间戳")
     sponsor_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     organizer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("organizers.id", ondelete="SET NULL"), nullable=True)

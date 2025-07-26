@@ -3,7 +3,6 @@ Task-related Pydantic schemas
 """
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 
@@ -26,6 +25,8 @@ class TaskBase(BaseModel):
     summary: Optional[str] = Field(None, max_length=500, description="任务简介")
     description: Optional[str] = None
     category: Optional[str] = Field(None, description="任务分类")
+    reward_details: Optional[str] = Field(None, description="奖励详情")
+    reward_type: Optional[str] = Field(None, description="奖励分类")
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
     external_link: Optional[str] = Field(None, description="活动原始链接")
 
@@ -41,6 +42,8 @@ class TaskUpdate(BaseModel):
     summary: Optional[str] = Field(None, max_length=500)
     description: Optional[str] = None
     category: Optional[str] = None
+    reward_details: Optional[str] = None
+    reward_type: Optional[str] = None
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
     external_link: Optional[str] = None
     status: Optional[TaskStatus] = None
@@ -71,6 +74,8 @@ class TaskSummary(BaseModel):
     title: str
     summary: Optional[str] = None
     category: Optional[str] = None
+    reward_details: Optional[str] = None
+    reward_type: Optional[str] = None
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
     sponsor_id: int
     organizer_id: Optional[int] = None
@@ -89,9 +94,7 @@ class TaskFilters(BaseModel):
     status: Optional[TaskStatus] = None
     sponsor_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
-    min_reward: Optional[Decimal] = None
-    max_reward: Optional[Decimal] = None
-    currency: Optional[str] = None
+    category: Optional[str] = None
     has_deadline: Optional[bool] = None
     search: Optional[str] = None
 

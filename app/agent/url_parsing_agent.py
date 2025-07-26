@@ -49,6 +49,8 @@ class URLParsingAgent:
     "description": "任务详细描述",
     "deadline": 时间戳数字或null,
     "category": "任务分类或null",
+    "reward_details": "奖励详情描述或null",
+    "reward_type": "奖励分类或null",
     "organizer_name": "主办方名称或null"
 }
 
@@ -65,7 +67,15 @@ class URLParsingAgent:
    - 交易竞赛：交易比赛、交易竞赛、交易挑战、交易活动
    - 答题竞赛：答题比赛、答题竞赛、答题挑战、答题活动
    - 或其他任何合理的分类名称
-4. 识别主办方名称：
+4. 提取奖励信息：
+   - reward_details: 奖励的具体描述，如"一等奖50,000 USDC，二等奖20,000 USDC"
+   - reward_type: 奖励分配方式，可选值：
+     * "每人": 每个获奖者都能获得完整奖励
+     * "瓜分": 多个获奖者平分总奖励
+     * "抽奖": 随机抽取获奖者
+     * "积分": 以积分形式发放奖励
+     * "权益": 非现金奖励，如NFT、白名单等
+5. 识别主办方名称：
    - 从页面内容中推断组织名称、公司名称或个人名称
    - 如果无法确定具体主办方，可以设置为null
 
@@ -245,6 +255,24 @@ class URLParsingAgent:
             except (ValueError, TypeError):
                 logger.warning("Invalid deadline timestamp, setting to None")
                 data["deadline"] = None
+
+        # 验证奖励详情
+        if data.get("reward_details") and isinstance(data["reward_details"], str):
+            reward_details = data["reward_details"].strip()
+            if len(reward_details) > 1000:
+                logger.warning("Reward details too long, truncating")
+                reward_details = reward_details[:1000]
+            data["reward_details"] = reward_details if reward_details else None
+
+        # 验证奖励分类
+        if data.get("reward_type") and isinstance(data["reward_type"], str):
+            reward_type = data["reward_type"].strip()
+            valid_reward_types = ["每人", "瓜分", "抽奖", "积分", "权益"]
+            if reward_type not in valid_reward_types:
+                logger.warning(f"Invalid reward type: {reward_type}, setting to None")
+                data["reward_type"] = None
+            else:
+                data["reward_type"] = reward_type
 
         return data
 

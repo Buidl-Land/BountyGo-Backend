@@ -37,6 +37,8 @@ class ParseResponse(BaseModel):
     description: Optional[str] = None
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
     category: Optional[str] = None
+    reward_details: Optional[str] = None
+    reward_type: Optional[str] = None
     organizer_name: Optional[str] = None
     organizer: Optional[OrganizerResponse] = None
     source_url: Optional[str] = None
@@ -118,6 +120,8 @@ async def parse_content(
             description=task_info.description,
             deadline=task_info.deadline,
             category=task_info.category,
+            reward_details=task_info.reward_details,
+            reward_type=task_info.reward_type,
             organizer_name=task_info.organizer_name,
             organizer=organizer_response,
             source_url=source_url

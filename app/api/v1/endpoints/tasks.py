@@ -27,6 +27,7 @@ from app.schemas.task import (
     MessageCreate,
     MessageList
 )
+from app.schemas.organizer import OrganizerSummary
 from app.schemas.base import SuccessResponse
 
 router = APIRouter()
@@ -40,8 +41,7 @@ async def get_tasks(
     status: Optional[str] = Query(None, description="任务状态筛选"),
     sponsor_id: Optional[int] = Query(None, description="发布者ID筛选"),
     tag_ids: Optional[str] = Query(None, description="标签ID列表，逗号分隔"),
-    min_reward: Optional[float] = Query(None, description="最小奖励金额"),
-    max_reward: Optional[float] = Query(None, description="最大奖励金额"),
+    category: Optional[str] = Query(None, description="任务分类筛选"),
     search: Optional[str] = Query(None, description="搜索关键词"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -53,13 +53,13 @@ async def get_tasks(
     - **status**: 任务状态 (active, completed, cancelled, paused)
     - **sponsor_id**: 发布者用户ID
     - **tag_ids**: 标签ID列表，用逗号分隔，如 "1,2,3"
-    - **min_reward**: 最小奖励金额
-    - **max_reward**: 最大奖励金额
+    - **category**: 任务分类 (黑客松, 征文, Meme创作, Web3交互, 推特抽奖, 开发实战)
     - **search**: 在标题和描述中搜索关键词
     """
     # 构建查询条件
     query = select(Task).options(
         selectinload(Task.sponsor),
+        selectinload(Task.organizer),
         selectinload(Task.task_tags).selectinload(TaskTag.tag)
     )
 
@@ -71,11 +71,9 @@ async def get_tasks(
     if sponsor_id:
         query = query.where(Task.sponsor_id == sponsor_id)
 
-    # 奖励金额筛选
-    if min_reward is not None:
-        query = query.where(Task.reward >= min_reward)
-    if max_reward is not None:
-        query = query.where(Task.reward <= max_reward)
+    # 分类筛选
+    if category:
+        query = query.where(Task.category == category)
 
     # 关键词搜索
     if search:
@@ -117,15 +115,23 @@ async def get_tasks(
         task_summary = TaskSummary(
             id=task.id,
             title=task.title,
-            reward=task.reward,
-            reward_currency=task.reward_currency,
+            summary=task.summary,
+            category=task.category,
+            reward_details=task.reward_details,
+            reward_type=task.reward_type,
             deadline=task.deadline,
             sponsor_id=task.sponsor_id,
+            organizer_id=task.organizer_id,
             status=task.status,
             view_count=task.view_count,
             join_count=task.join_count,
             created_at=task.created_at,
-            tags=[tt.tag for tt in task.task_tags]
+            tags=[tt.tag for tt in task.task_tags],
+            organizer=OrganizerSummary(
+                id=task.organizer.id,
+                name=task.organizer.name,
+                is_verified=task.organizer.is_verified
+            ) if task.organizer else None
         )
         task_summaries.append(task_summary)
 
@@ -146,15 +152,18 @@ async def create_task(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    创建新的赏金任务
+    创建新任务
 
     - **title**: 任务标题
+    - **summary**: 任务简介
     - **description**: 任务描述
-    - **reward**: 奖励金额
-    - **reward_currency**: 奖励货币
+    - **category**: 任务分类
+    - **reward_details**: 奖励详情
+    - **reward_type**: 奖励分类 (每人、瓜分、抽奖、积分、权益)
     - **deadline**: 截止时间
     - **external_link**: 外部链接
     - **tag_ids**: 关联的标签ID列表
+    - **organizer_name**: 主办方名称
     """
     # 创建任务
     task_dict = task_data.model_dump(exclude={"tag_ids"})

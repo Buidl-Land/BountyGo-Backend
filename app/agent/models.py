@@ -35,6 +35,8 @@ class TaskInfo(BaseModel):
     description: Optional[str] = Field(None, description="任务描述")
     deadline: Optional[int] = Field(None, description="截止日期时间戳")
     category: Optional[str] = Field(None, description="任务分类：黑客松、征文、Meme创作、Web3交互、推特抽奖、开发实战")
+    reward_details: Optional[str] = Field(None, description="奖励详情")
+    reward_type: Optional[str] = Field(None, description="奖励分类：每人、瓜分、抽奖、积分、权益")
     organizer_name: Optional[str] = Field(None, description="主办方名称")
 
 
