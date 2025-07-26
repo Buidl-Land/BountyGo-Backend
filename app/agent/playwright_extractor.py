@@ -74,7 +74,7 @@ class PlaywrightContentExtractor:
             if parsed.scheme not in self.allowed_schemes:
                 raise URLValidationError(
                     f"不支持的协议: {parsed.scheme}",
-                    f"仅支持: {', '.join(self.allowed_schemes)}"
+                    details=f"仅支持: {', '.join(self.allowed_schemes)}"
                 )
             
             # 检查域名
@@ -89,7 +89,7 @@ class PlaywrightContentExtractor:
                     if hostname_lower.startswith(blocked):
                         raise URLValidationError(
                             f"不允许访问内网地址: {hostname}",
-                            "出于安全考虑，禁止访问内网地址"
+                            details="出于安全考虑，禁止访问内网地址"
                         )
             
             # 返回标准化的URL
@@ -240,13 +240,13 @@ class PlaywrightContentExtractor:
                             raise
                 
                 if response is None:
-                    raise ContentExtractionError("页面导航失败", "无法访问指定URL")
+                    raise ContentExtractionError("页面导航失败", details="无法访问指定URL")
                 
                 # 检查响应状态
                 if response.status >= 400:
                     raise ContentExtractionError(
                         f"HTTP错误: {response.status}",
-                        f"服务器返回状态码: {response.status}"
+                        details=f"服务器返回状态码: {response.status}"
                     )
                 
                 # 等待页面加载完成
@@ -301,7 +301,7 @@ class PlaywrightContentExtractor:
             else:
                 raise ContentExtractionError(
                     f"内容提取失败: {str(e)}",
-                    "使用Playwright提取内容时发生错误"
+                    details="使用Playwright提取内容时发生错误"
                 )
     
     async def _setup_page_listeners(self, page: Page):

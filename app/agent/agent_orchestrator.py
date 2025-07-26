@@ -15,6 +15,7 @@ from .url_parsing_agent import URLParsingAgent
 from .image_parsing_agent import ImageParsingAgent
 from .models import TaskInfo, WebContent
 from .content_extractor import ContentExtractor
+from .playwright_extractor import PlaywrightContentExtractor
 from .preference_manager import UserPreferences
 from .exceptions import ConfigurationError, ModelAPIError
 from .concurrent_processor import get_concurrent_processor, TaskPriority
@@ -71,8 +72,16 @@ class WorkflowEngine:
     
     @cache_result(key_prefix="web_content", ttl_seconds=3600)
     async def _get_cached_content(self, url: str, content_extractor) -> Any:
-        """获取缓存的网页内容"""
-        return await content_extractor.extract_content(url)
+        """获取缓存的网页内容（支持fallback）"""
+        try:
+            return await content_extractor.extract_content(url)
+        except Exception as e:
+            logger.warning(f"HTTP内容提取失败，尝试Playwright fallback: {e}")
+            # 使用Playwright作为fallback
+            if self.orchestrator.playwright_extractor:
+                return await self.orchestrator.playwright_extractor.extract_content(url)
+            else:
+                raise
     
     async def execute_url_workflow(
         self, 
@@ -504,6 +513,7 @@ class AgentOrchestrator:
         self.agents: Dict[AgentRole, Any] = {}
         self.workflow_engine = WorkflowEngine(self)
         self.content_extractor: Optional[ContentExtractor] = None
+        self.playwright_extractor: Optional[PlaywrightContentExtractor] = None
         self.cache_manager = get_cache_manager()
         self.concurrent_processor = None
         self._initialized = False
@@ -511,8 +521,13 @@ class AgentOrchestrator:
     async def initialize(self) -> None:
         """初始化编排器"""
         try:
-            # 初始化内容提取器
-            self.content_extractor = ContentExtractor()
+            # 初始化内容提取器（使用真实浏览器User-Agent）
+            self.content_extractor = ContentExtractor(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            )
+            
+            # 初始化Playwright提取器作为fallback
+            self.playwright_extractor = PlaywrightContentExtractor()
             
             # 初始化并发处理器
             self.concurrent_processor = await get_concurrent_processor()
@@ -530,15 +545,21 @@ class AgentOrchestrator:
     async def _initialize_agents(self) -> None:
         """初始化所有Agent"""
         agent_configs = self.config_manager.get_all_agent_configs()
+        logger.info(f"开始初始化Agents，配置数量: {len(agent_configs)}")
         
         for role, config in agent_configs.items():
             try:
+                logger.info(f"正在创建Agent: {role.value}")
                 agent = await self._create_agent(role, config)
                 if agent:
                     self.agents[role] = agent
-                    logger.info(f"初始化Agent: {role.value}")
+                    logger.info(f"✅ 初始化Agent成功: {role.value}")
+                else:
+                    logger.warning(f"❌ Agent创建返回None: {role.value}")
             except Exception as e:
-                logger.error(f"初始化Agent失败 {role.value}: {e}")
+                logger.error(f"❌ 初始化Agent失败 {role.value}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
     
     async def _create_agent(self, role: AgentRole, config: AgentConfig) -> Optional[Any]:
         """创建Agent实例"""
@@ -557,7 +578,10 @@ class AgentOrchestrator:
             )
             
             if role == AgentRole.URL_PARSER:
-                return URLParsingAgent(ppio_config)
+                logger.info(f"创建URLParsingAgent，配置: {ppio_config.model_name}")
+                agent = URLParsingAgent(ppio_config)
+                logger.info(f"URLParsingAgent创建成功")
+                return agent
             elif role == AgentRole.IMAGE_ANALYZER:
                 agent = ImageParsingAgent(ppio_config)
                 # 图片分析Agent需要异步初始化
@@ -579,7 +603,9 @@ class AgentOrchestrator:
     def get_content_extractor(self) -> ContentExtractor:
         """获取内容提取器"""
         if not self.content_extractor:
-            self.content_extractor = ContentExtractor()
+            self.content_extractor = ContentExtractor(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            )
         return self.content_extractor
     
     async def execute_workflow(

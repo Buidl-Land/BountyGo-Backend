@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.client import PPIOModelClient
 from app.agent.factory import get_ppio_client
 from app.agent.content_extractor import ContentExtractor
+from app.agent.playwright_extractor import PlaywrightContentExtractor
 from app.agent.url_parsing_agent import URLParsingAgent
 from app.agent.image_parsing_agent import ImageParsingAgent
 from app.agent.task_creator import TaskCreator
@@ -77,6 +78,7 @@ class URLAgentService:
         # 延迟初始化组件
         self._ppio_client: Optional[PPIOModelClient] = None
         self._content_extractor: Optional[ContentExtractor] = None
+        self._playwright_extractor: Optional[PlaywrightContentExtractor] = None
         self._url_parsing_agent: Optional[URLParsingAgent] = None
         self._image_parsing_agent: Optional[ImageParsingAgent] = None
         self._task_creator: Optional[TaskCreator] = None
@@ -90,6 +92,13 @@ class URLAgentService:
         
         # 错误恢复配置
         self.enable_fallback = True
+        
+        # 需要使用Playwright的网站域名
+        self.playwright_domains = {
+            'x.com', 'twitter.com', 'facebook.com', 'instagram.com',
+            'linkedin.com', 'tiktok.com', 'youtube.com', 'reddit.com',
+            'discord.com', 'telegram.org', 'whatsapp.com'
+        }
     
     @property
     def ppio_client(self) -> PPIOModelClient:
@@ -102,6 +111,21 @@ class URLAgentService:
         """获取专门角色的PPIO客户端"""
         return get_ppio_client(agent_role)
     
+    def _should_use_playwright(self, url: str) -> bool:
+        """判断是否应该使用Playwright提取器"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # 移除www前缀
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            
+            return domain in self.playwright_domains
+        except Exception:
+            return False
+    
     @property
     def content_extractor(self) -> ContentExtractor:
         """获取智能内容提取器"""
@@ -111,6 +135,16 @@ class URLAgentService:
                 max_content_length=self.settings.max_content_length
             )
         return self._content_extractor
+    
+    @property
+    def playwright_extractor(self) -> PlaywrightContentExtractor:
+        """获取Playwright内容提取器"""
+        if self._playwright_extractor is None:
+            self._playwright_extractor = PlaywrightContentExtractor(
+                timeout=self.settings.content_extraction_timeout,
+                max_content_length=self.settings.max_content_length
+            )
+        return self._playwright_extractor
     
     @property
     def url_parsing_agent(self) -> URLParsingAgent:
@@ -270,6 +304,9 @@ class URLAgentService:
     async def _extract_content_with_retry(self, url: str, request_id: str) -> WebContent:
         """带重试的内容提取"""
         last_exception = None
+        use_playwright = self._should_use_playwright(url)
+        
+        logger.info(f"[{request_id}] Using {'Playwright' if use_playwright else 'HTTP'} extractor for URL: {url}")
         
         for attempt in range(self.max_retries):
             try:
@@ -277,7 +314,11 @@ class URLAgentService:
                     logger.info(f"[{request_id}] Content extraction retry attempt {attempt + 1}/{self.max_retries}")
                     await asyncio.sleep(self.retry_delay * attempt)
                 
-                return await self.content_extractor.extract_content(url)
+                # 智能选择提取器
+                if use_playwright:
+                    return await self.playwright_extractor.extract_content(url)
+                else:
+                    return await self.content_extractor.extract_content(url)
                 
             except (URLValidationError, ContentExtractionError) as e:
                 last_exception = e
@@ -286,6 +327,15 @@ class URLAgentService:
                 # 对于URL验证错误，不重试
                 if isinstance(e, URLValidationError):
                     break
+                
+                # 如果普通HTTP提取器失败，尝试使用Playwright作为fallback
+                if not use_playwright and self.enable_fallback and attempt == self.max_retries - 1:
+                    logger.info(f"[{request_id}] Falling back to Playwright extractor")
+                    try:
+                        return await self.playwright_extractor.extract_content(url)
+                    except Exception as fallback_e:
+                        logger.warning(f"[{request_id}] Playwright fallback also failed: {fallback_e}")
+                        last_exception = fallback_e
                     
             except Exception as e:
                 last_exception = e
